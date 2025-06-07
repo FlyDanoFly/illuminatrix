@@ -1,0 +1,20 @@
+[project]
+name = "illuminatrix"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Dano!",email = "flydanofly@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+]
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.group.dev.dependencies]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
