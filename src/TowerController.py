@@ -1,5 +1,5 @@
-from Tower import Tower
 from constants import ColorType, LightPos, TowerEnum
+from Tower import Tower
 
 
 class TowerController:
@@ -13,6 +13,9 @@ class TowerController:
         elif self._one_indexed:
             index -= 1
         return self._towers[index]
+
+    def __iter__(self):
+        return iter(self._towers)
 
     def set_color(self, color: ColorType, light: LightPos = LightPos.All):
         for tower in self._towers:

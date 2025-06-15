@@ -1,6 +1,6 @@
+from constants import ColorType, LightPos, TowerEnum
 from LightSystem import LightSystem
 from SoundSystem import SoundSystem
-from constants import ColorType, LightPos, TowerEnum
 
 
 class Tower:

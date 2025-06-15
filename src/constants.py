@@ -1,4 +1,4 @@
-from enum import Enum, Flag, auto, StrEnum
+from enum import Enum, Flag, StrEnum, auto
 
 
 class IlluminatrixError(Exception):
@@ -47,7 +47,7 @@ class Environment(StrEnum):
 ENVIRONMENT_CONTEXT = {
     Environment.EMBEDDED: {},
     Environment.EXTERNAL: {
-        "server_url": "wss://houseofsucky.xyz/illuminatrix_simulation_server",
+        "server_address": "wss://houseofsucky.xyz/illuminatrix_simulation_server",
         # "ack_style": "",  # not sure about the scope of this yet
     },
     Environment.LOCAL: {

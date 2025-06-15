@@ -1,23 +1,26 @@
-
-from DmxLightSystem import DmxLightSystem
+# from DmxLightSystem import DmxLightSystem
+from constants import Environment
 from LightSystem import LightSystem
+from NullSoundSystem import NullSoundSystem
 from PrintLightSystem import PrintLightSystem
 from PrintSoundSystem import PrintSoundSystem
 from SoundSystem import SoundSystem
-from WebRelayLightSystem import WebRelayLightSystem
-from constants import Environment
+
+# from WebRelayLightSystem import WebRelayLightSystem
+from WebsocketSimulation import WebsocketSimulation
 
 
 class SystemFactory:
     LIGHT_SYSTEM_MAP: dict[Environment, LightSystem] = {
-        Environment.EMBEDDED: DmxLightSystem(),
-        Environment.EXTERNAL: WebRelayLightSystem(),
-        Environment.LOCAL: WebRelayLightSystem(),
+        # Environment.EMBEDDED: DmxLightSystem(),
+        Environment.EXTERNAL: WebsocketSimulation(),
+        # Environment.LOCAL: WebRelayLightSystem(),
         Environment.PRINT: PrintLightSystem(),
     }
     SOUND_SYSTEM_MAP: dict[Environment, SoundSystem] = {
         Environment.EMBEDDED: PrintSoundSystem(),
-        Environment.EXTERNAL: PrintSoundSystem(),
+        Environment.EXTERNAL: NullSoundSystem(),
+        # Environment.EXTERNAL: PrintSoundSystem(),
         Environment.LOCAL: PrintSoundSystem(),
         Environment.PRINT: PrintSoundSystem(),
     }
@@ -31,7 +34,7 @@ class SystemFactory:
         self._light_system = SystemFactory.LIGHT_SYSTEM_MAP[self.mode]
         self._light_system.setup(**self.context)
         self._sound_system = SystemFactory.SOUND_SYSTEM_MAP[self.mode]
-        self._sound_system.setup(**self.context)
+        # self._sound_system.setup(**self.context)
 
 
     def get_light_system(self) -> LightSystem:

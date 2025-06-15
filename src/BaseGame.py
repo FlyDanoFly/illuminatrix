@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 
 class BaseGame(ABC):
+    @abstractmethod
     def first_frame_update(self) -> None:
         """Override this to set up a first frame before updating"""
         pass

@@ -3,7 +3,11 @@ from abc import ABC, abstractmethod
 
 class BaseSystem(ABC):
     @abstractmethod
-    def setup(self, num_towers: int) -> None:
+    def startup(self) -> None:
+        pass
+
+    @abstractmethod
+    def shutdown(self) -> None:
         pass
 
     @abstractmethod

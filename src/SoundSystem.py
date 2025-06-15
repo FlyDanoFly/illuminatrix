@@ -6,4 +6,5 @@ from constants import SystemIdentifier
 
 class SoundSystem(BaseSystem):
     @abstractmethod
-    def play(self, tower_id: SystemIdentifier, sound: str): pass
+    def play(self, system_id: SystemIdentifier, sound: str) -> None:
+        pass
