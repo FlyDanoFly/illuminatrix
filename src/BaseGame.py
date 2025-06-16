@@ -8,6 +8,6 @@ class BaseGame(ABC):
         pass
 
     @abstractmethod
-    def update(self, delta_ms: float) -> bool:
+    def update(self, delta_ms: float) -> bool | None:
         """Returns: True if program should terminate, falsy to continue"""
         pass
