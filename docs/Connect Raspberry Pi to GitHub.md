@@ -5,4 +5,4 @@
 	2. `cd Projects/Illuminatrix/python`
 	3. `git clone git@github.com:FlyDanoFly/illuminatrix.git`
 	4. It works!
-3. 
+3. (a little bit of back and forth to get it working between architectures)

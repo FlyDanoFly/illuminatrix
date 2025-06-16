@@ -8,12 +8,16 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "websockets (>=15.0.1,<16.0.0)"
 ]
 
 [tool.poetry]
 package-mode = false
 
 [tool.poetry.group.dev.dependencies]
+
+[tool.ruff]
+lint.extend-select = ["B", "I"]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
