@@ -61,10 +61,12 @@ def main():
     systems.append(light_system)
     sound_system = system_factory.get_sound_system()
     systems.append(sound_system)
+    input_system = system_factory.get_input_system()
+    systems.append(input_system)
 
     # TODO: Turn the tower generator into a factory
     towers = [
-        Tower(tower_id, tower_to_system_identifier[tower_id], light_system, sound_system)
+        Tower(tower_id, tower_to_system_identifier[tower_id], light_system, sound_system, input_system)
         for tower_id in TowerEnum
     ]
     tower_controller = TowerController(towers)
@@ -95,11 +97,11 @@ def main():
 
             shutdown_request = game.update(delta_ms)
 
-            light_system.update(delta_ms)
-            sound_system.update(delta_ms)
+            for system in systems:
+                system.update(delta_ms)
 
-            light_system.render()
-            sound_system.render()
+            for system in systems:
+                system.render()
 
             if shutdown_request:
                 break
