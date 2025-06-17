@@ -24,3 +24,6 @@ class TowerController:
     def play_sounds(self, sound):
         for tower in self._towers:
             tower.play_sound(sound)
+
+    def any_switch_pressed(self) -> bool:
+        return any(tower.get_switch_state() for tower in self._towers)

@@ -1,17 +1,29 @@
-from constants import ColorType, LightPos, TowerEnum
+from InputSystem import InputSystem
+from constants import ColorType, LightPos, SystemIdentifier, TowerEnum
 from LightSystem import LightSystem
 from SoundSystem import SoundSystem
 
 
 class Tower:
-    def __init__(self, tower_enum: TowerEnum, system_identifier, light_system: LightSystem, sound_system: SoundSystem):
-        self.tower = tower_enum
-        self.system_identifier = system_identifier
-        self.light_system = light_system
-        self.sound_system = sound_system
+    def __init__(
+            self,
+            tower_enum: TowerEnum,
+            system_identifier: SystemIdentifier,
+            light_system: LightSystem,
+            sound_system: SoundSystem,
+            input_system: InputSystem,
+    ):
+        self._tower = tower_enum
+        self._system_identifier = system_identifier
+        self._light_system = light_system
+        self._sound_system = sound_system
+        self._input_system = input_system
 
     def set_color(self, color: ColorType, light: LightPos = LightPos.All):
-        self.light_system.set(self.system_identifier, color, light)
+        self._light_system.set(self._system_identifier, color, light)
 
     def play_sound(self, sound):
-        self.sound_system.play(self.system_identifier, sound)
+        self._sound_system.play(self._system_identifier, sound)
+
+    def get_switch_state(self) -> bool:
+        return self._input_system.get_switch_state(self._system_identifier)
