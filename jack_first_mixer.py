@@ -9,6 +9,12 @@ import jack
 import numpy
 import soundfile
 
+# 0 == multipling by volume, doing it every frame during the fade out
+# 1 == making an array to do the fadeout, still relies on python loops
+# 2 == multiplying by volume, doing it once per update
+# 3 == no python loops, do it all with numpy operations -- BEST by an order of magnitude, cpu_load goes done to 0.9 from 24-28ish
+STYLE = 3
+
 
 class MixerState(Enum):
     INIT = 0
@@ -33,9 +39,12 @@ class Sound:
         self.fade_out_frames_remaining: int = 0
         self.fade_out_step: float = 0.0
         self.fade_out_comelete: bool = False
+        self.fade_out_1_curve = None
+        self.fade_out_1_index = 0
 
     def is_done(self) -> bool:
-        if self.loops:
+        # print(self.loops > 0, self.fade_out_comelete, self.fade_out_active, self.position >= len(self.data))
+        if self.loops > 0:
             return False
         if self.fade_out_comelete:
             return True
@@ -43,31 +52,43 @@ class Sound:
             return False
         return self.position >= len(self.data)
 
-    def start_fade_out(self, duration_sec: float, samplerate: int) -> None:
+    def start_fade_out_0(self, duration_sec: float, samplerate: int) -> None:
         self.fade_out_active = True
         self.fade_out_frames_remaining = int(duration_sec * samplerate)
         self.fade_out_step = self.volume / max(1, self.fade_out_frames_remaining)
 
-    def mix_into(self, output_buffers: list[numpy.ndarray], channel_map: list[int]) -> None:
+    def start_fade_out_1(self, duration_sec: float, samplerate: int) -> None:
+        total_frames = int(duration_sec * samplerate)
+        self.fade_out_1_curve = numpy.linspace(self.volume, 0.0, total_frames, dtype=numpy.float32)
+        self.fade_out_1_index = 0
+        self.fade_out_active = True
+
+    def start_fade_out_2(self, duration_sec: float, samplerate: int) -> None:
+        self.fade_out_active = True
+        self.fade_out_frames_remaining = int(duration_sec * samplerate)
+        self.fade_out_step = 1024*self.volume / max(1, self.fade_out_frames_remaining)
+
+    def mix_into_0(self, output_buffers: list[numpy.ndarray], channel_map: list[int]) -> None:
         frames = len(output_buffers[0])
         for i, target_channel in enumerate(channel_map):
             if target_channel >= len(output_buffers):
                 continue
             buf = output_buffers[target_channel]
+            position = self.position
             for f in range(frames):
-                if self.position >= len(self.data):
+                if position >= len(self.data):
                     if self.loops > 0:
-                        self.position = 0
+                        position = 0
                         if self.loops < 0:
                             self.loops -= 0
                     else:
                         break
                 if self.volume >= 0.95:
-                    sample = self.data[self.position, i % self.channels]
+                    sample = self.data[position, i % self.channels]
                 else:
-                    sample = self.data[self.position, i % self.channels] * self.volume
+                    sample = self.data[position, i % self.channels] * self.volume
                 buf[f] += sample
-                self.position += 1
+                position += 1
                 if self.fade_out_active:
                     self.volume = max(0.0, self.volume - self.fade_out_step)
                     self.fade_out_frames_remaining -= 1
@@ -76,6 +97,107 @@ class Sound:
                         self.fade_out_active = False
                         self.fade_out_comelete = True
                         print("="*80)
+        self.position += frames
+ 
+    def mix_into_1(self, output_buffers: list[numpy.ndarray], channel_map: list[int]) -> None:
+        frames = len(output_buffers[0])
+        for i, target_channel in enumerate(channel_map):
+            if target_channel >= len(output_buffers):
+                continue
+            buf = output_buffers[target_channel]
+            position = self.position
+            for f in range(frames):
+                if position >= len(self.data):
+                    if self.loops > 0:
+                        position = 0
+                        if self.loops < 0:
+                            self.loops -= 0
+                    else:
+                        break
+                # if self.volume >= 0.95:
+                #     sample = self.data[position, i % self.channels]
+                # else:
+                #     sample = self.data[position, i % self.channels] * self.volume
+                fade_multiplier = 1.0
+                if self.fade_out_active and self.fade_out_1_index < len(self.fade_out_1_curve):
+                    fade_multiplier = self.fade_out_1_curve[self.fade_out_1_index]
+                elif self.fade_out_comelete or self.fade_out_active and self.fade_out_1_index >= len(self.fade_out_1_curve):
+                    fade_multiplier = 0.0
+                sample = self.data[position, i % self.channels] * fade_multiplier
+                sample = self.data[position, i % self.channels] * fade_multiplier
+
+                buf[f] += sample
+                position += 1
+                if self.fade_out_active:
+                    self.fade_out_1_index += 1
+                    if self.fade_out_1_index >= len(self.fade_out_1_curve):
+                        self.fade_out_active = False
+                        self.fade_out_comelete = True
+        self.position += frames
+
+    def mix_into_2(self, output_buffers: list[numpy.ndarray], channel_map: list[int]) -> None:
+        frames = len(output_buffers[0])
+        for i, target_channel in enumerate(channel_map):
+            if target_channel >= len(output_buffers):
+                continue
+            buf = output_buffers[target_channel]
+            position = self.position
+            for f in range(frames):
+                if position >= len(self.data):
+                    if self.loops > 0:
+                        position = 0
+                        if self.loops < 0:
+                            self.loops -= 0
+                    else:
+                        break
+                if self.volume >= 0.95:
+                    sample = self.data[position, i % self.channels]
+                else:
+                    sample = self.data[position, i % self.channels] * self.volume
+                buf[f] += sample
+                position += 1
+        self.position += frames
+        if self.fade_out_active:
+            self.volume = max(0.0, self.volume - self.fade_out_step)
+            self.fade_out_frames_remaining -= frames
+            if self.fade_out_frames_remaining <= 0 or self.volume <= 0.0:
+                self.volume = 0.0
+                self.fade_out_active = False
+                self.fade_out_comelete = True
+
+    def mix_into_3(self, output_buffers: list[numpy.ndarray], channel_map: list[int]) -> None:
+        frames = len(output_buffers[0])
+        position = self.position
+        for i, target_channel in enumerate(channel_map):
+            if target_channel >= len(output_buffers):
+                continue
+            buf = output_buffers[target_channel]
+            position = self.position
+            remaining = len(self.data) - position
+            block_len = min(frames, remaining)
+
+            samples = self.data[position:position+block_len, i % self.channels]
+
+            if self.fade_out_active or self.fade_out_comelete:
+                fade_remaining = len(self.fade_out_1_curve) - self.fade_out_1_index
+                fade_len = min(block_len, fade_remaining)
+                fade_values = self.fade_out_1_curve[self.fade_out_1_index:self.fade_out_1_index+fade_len]
+                samples = samples[:fade_len] * fade_values
+                self.fade_out_1_index += fade_len
+                if self.fade_out_1_index >= len(self.fade_out_1_curve):
+                    self.fade_out_active = False
+                    self.fade_out_comelete = True
+
+                buf[:fade_len] += samples
+                position += fade_len
+            else:
+                buf[:block_len] += samples * self.volume
+                position += block_len
+
+            if position >= len(self.data) and self.loops > 0:
+                self.loops -= 1
+                position = 0
+        self.position = position
 
 
 class JackMixer:
@@ -106,7 +228,17 @@ class JackMixer:
         with self.lock:
             still_playing = []
             for sound, channel_map in self.active_sounds:
-                sound.mix_into(output_buffers, channel_map)
+                if STYLE == 0:
+                    sound.mix_into_0(output_buffers, channel_map)
+                elif STYLE == 1:
+                    sound.mix_into_1(output_buffers, channel_map)
+                elif STYLE == 2:
+                    sound.mix_into_2(output_buffers, channel_map)
+                elif STYLE == 3:
+                    sound.mix_into_3(output_buffers, channel_map)
+                else:
+                    RuntimeError("Invalid STYLE")
+                # sound.mix_into(output_buffers, channel_map)
                 if not sound.is_done():
                     still_playing.append((sound, channel_map))
             self.active_sounds = still_playing
@@ -146,7 +278,16 @@ class JackMixer:
     def stop_all(self, fade_duration=0.5):
         with self.lock:
             for sound, _ in self.active_sounds:
-                sound.start_fade_out(fade_duration, self.client.samplerate)
+                if STYLE == 0:
+                    sound.start_fade_out_0(fade_duration, self.client.samplerate)
+                elif STYLE == 1:
+                    sound.start_fade_out_1(fade_duration, self.client.samplerate)
+                elif STYLE == 2:
+                    sound.start_fade_out_2(fade_duration, self.client.samplerate)
+                elif STYLE == 3:
+                    sound.start_fade_out_1(fade_duration, self.client.samplerate)
+                else:
+                    RuntimeError("Invalid STYLE")
 
     def is_anything_playing(self):
         return bool(self.active_sounds)
@@ -159,9 +300,9 @@ def main():
     snd1 = Sound("LRMonoPhase4_8ch.wav")
     snd2 = Sound("LRMonoPhase4_8ch.wav")
 
-    mixer.play(snd1, [0])       # Play to channel 0
+    mixer.play(snd1, [0,6])       # Play to channel 0
     time.sleep(1.0)
-    mixer.play(snd2, [1])    # Play stereo sound to channels 2 and 3
+    mixer.play(snd2, [1, 6, 4])    # Play stereo sound to channels 2 and 3
     # mixer.play(snd2, [2, 3])    # Play stereo sound to channels 2 and 3
 
     def shutdown_handler(*_) -> None:
