@@ -2,7 +2,6 @@ import signal
 import sys
 import threading
 import time
-import types
 import typing
 from enum import Enum
 
@@ -64,11 +63,9 @@ class Sound:
                     else:
                         break
                 if self.volume >= 0.95:
-                    sample = self.data[self.position, i % self.channels] * self.volume
-                    # sample = self.data[self.position, i % self.channels]
+                    sample = self.data[self.position, i % self.channels]
                 else:
                     sample = self.data[self.position, i % self.channels] * self.volume
-                sample = self.data[self.position, i % self.channels] * self.volume
                 buf[f] += sample
                 self.position += 1
                 if self.fade_out_active:
@@ -177,7 +174,7 @@ def main():
         mixer.stop_all(fade_duration=1.0)
         # time.sleep(1.2)
         while mixer.is_anything_playing():
-            print("fading")
+            print("fading", mixer.client.cpu_load())
             time.sleep(0.05)
         mixer.shutdown()
         sys.exit(0)
