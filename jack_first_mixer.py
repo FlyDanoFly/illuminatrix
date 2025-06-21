@@ -1,3 +1,4 @@
+import logging
 import signal
 import sys
 import threading
@@ -8,6 +9,8 @@ from enum import Enum
 import jack
 import numpy
 import soundfile
+
+logger = logging.getLogger(__name__)
 
 
 class MixerState(Enum):
@@ -22,7 +25,15 @@ class Sound:
         self.data: numpy.ndarray
         self.samplerate: int
         self.data, self.samplerate = soundfile.read(filename, dtype='float32')
+        if len(self.data.shape) > 1:
+            # TODO: I'm trying to get mono but it breaks elsewhere in places in numpy I don't understand yet
+            # TODO: I'll kludge it into mono then back to stereo (next if statement)
+            # TODO: Learn what vectorizing is in numpy, I'm pretty sure it's applying a thing to an array at phenominal speeds (no python looks), underestand it and the calling mechanic
+            # It actuall sounds pretty good, mono comes later
+            self.data = self.data.sum(axis=1) / self.data.shape[1]  # convert stereo to mono
         if len(self.data.shape) == 1:
+            # Leftover from ChatGPT, I think this goes in the wrong direction, I want mono
+            # Currently needed to make the other code work, the code assumes the wave is stereo
             self.data = self.data[:, numpy.newaxis]  # mono to 2D
         self.position: int = 0
         self.channels: int = self.data.shape[1]
@@ -36,13 +47,21 @@ class Sound:
         self.fade_out_curve = numpy.linspace(1.0, 1.0, 1, dtype=numpy.float32)
         self.fade_out_index = 0
 
+    def __del__(self):
+        """Ensure resources are cleaned up."""
+        print("Sound object is being deleted, cleaning up resources.")
+        if hasattr(self, 'data'):
+            del self.data
+        if hasattr(self, 'fade_out_curve'):
+            del self.fade_out_curve
+
     def is_done(self) -> bool:
-        # print(self.loops > 0, self.fade_out_comelete, self.fade_out_active, self.position >= len(self.data))
-        if self.loops > 0:
-            return False
+        logger.debug("%r %r %r %r", self.loops > 0, self.fade_out_comelete, self.fade_out_active, self.position >= len(self.data))
         if self.fade_out_comelete:
             return True
         if self.fade_out_active:
+            return False
+        if self.loops > 0:
             return False
         return self.position >= len(self.data)
 
@@ -51,6 +70,12 @@ class Sound:
         self.fade_out_curve = numpy.linspace(self.volume, 0.0, total_frames, dtype=numpy.float32)
         self.fade_out_index = 0
         self.fade_out_active = True
+
+    def stop(self) -> None:
+        """Stop the sound immediately, without fading out."""
+        self.fade_out_active = False
+        self.fade_out_comelete = True
+        self.position = len(self.data)
 
     def mix_into(self, output_buffers: list[numpy.ndarray], channel_map: list[int]) -> None:
         frames = len(output_buffers[0])
@@ -81,7 +106,7 @@ class Sound:
                 buf[:block_len] += samples * self.volume
                 position += block_len
 
-            if position >= len(self.data) and self.loops > 0:
+            if position >= len(self.data) and self.loops != 0:
                 self.loops -= 1
                 position = 0
         self.position = position
@@ -89,6 +114,7 @@ class Sound:
 
 class JackMixer:
     def __init__(self, name: str = "jack_mixer", num_channels: int = 8):
+        # TODO: perhaps make the channel auto detected, as well as the force to stereo?
         self.client: jack.Client = jack.Client(name)
         self.num_channels: int = num_channels
         self.outports: list[jack.OwnPort] = [typing.cast("jack.OwnPort", self.client.outports.register(f"out_{i}")) for i in range(num_channels)]
@@ -127,7 +153,7 @@ class JackMixer:
         self.state = MixerState.STARTED
         if auto_connect:
             self._connect_to_physical_outputs()
-        print("Mixer started.")
+        logger.info("Mixer started.")
 
     def _connect_to_physical_outputs(self):
         # Auto-connect to physical outputs
@@ -141,10 +167,10 @@ class JackMixer:
             return
         self.shutdown_called = True
         self.state = MixerState.SHUTDOWN
-        print("Shutting down JACK mixer...")
+        logger.info("Shutting down JACK mixer...")
         self.client.deactivate()
         self.client.close()
-        print("Mixer shut down cleanly.")
+        logger.info("Mixer shut down cleanly.")
 
     def play(self, sound: Sound, channel_map):
         if self.state != MixerState.STARTED:
@@ -162,15 +188,23 @@ class JackMixer:
 
 # === Usage Example ===
 def main():
-    mixer = JackMixer(num_channels=8)
-    mixer.startup()
-    snd1 = Sound("LRMonoPhase4_8ch.wav", num_loops=2)
-    snd2 = Sound("LRMonoPhase4_8ch.wav")
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    mixer.play(snd1, [0,6])       # Play to channel 0
+    mixer = JackMixer(num_channels=2)
+    # mixer = JackMixer(num_channels=8)
+    mixer.startup()
+
+    filename = "LRMonof32.wav"  # Default
+    if len(sys.argv) > 1:
+        filename = sys.argv[1]
+
+    snd1 = Sound(filename, num_loops=10)
+    snd2 = Sound(filename, num_loops=-1)  # Loop forever
+
+    stop_first_sound_time = 5.0 + time.time()
+    mixer.play(snd1, [0])       # Play to channel 0
     time.sleep(1.0)
-    mixer.play(snd2, [1, 6, 4])    # Play stereo sound to channels 2 and 3
-    # mixer.play(snd2, [2, 3])    # Play stereo sound to channels 2 and 3
+    mixer.play(snd2, [1])    # Play stereo sound to channels 2 and 3
 
     def shutdown_handler(*_) -> None:
         # handler(signal_number: int, frame: types.FrameType|None)
@@ -178,11 +212,11 @@ def main():
         # current stack frame (None or a frame object; for a description of
         # frame objects, see the description in the type hierarchy or see the
         # attribute descriptions in the inspect module).
-        print("\nSignal received, shutting down...")
+        logger.info("\nSignal received, shutting down...")
         mixer.stop_all(fade_duration=1.0)
         # time.sleep(1.2)
         while mixer.is_anything_playing():
-            print("fading", mixer.client.cpu_load())
+            logger.info("   fading %.3f", mixer.client.cpu_load())
             time.sleep(0.05)
         mixer.shutdown()
         sys.exit(0)
@@ -194,14 +228,23 @@ def main():
         # Keep main thread alive while sounds play
         i = 0
         while mixer.is_anything_playing():
-            print("waiting for sounds to finish", i, mixer.client.cpu_load())
+            logger.info("waiting for sounds to finish %d %.3f %.3f %r", i, mixer.client.cpu_load(), time.time()-stop_first_sound_time, snd1)
+            if snd1 and time.time() > stop_first_sound_time:
+                logger.info("Stopping first sound")
+                logger.info("Stopping first sound")
+                logger.info("Stopping first sound")
+                logger.info("Stopping first sound")
+                logger.info("Stopping first sound")
+                snd1.start_fade_out(0.1, snd1.samplerate)
+                # snd1.stop()
+                snd1 = None
             time.sleep(0.5)
             i += 1
     except KeyboardInterrupt:
-        print("keyboardinterrupt received")
+        logger.info("keyboardinterrupt received")
 
     mixer.shutdown()
-    print("that's it")
+    logger.info("that's it")
 
 if __name__ == "__main__":
     main()
