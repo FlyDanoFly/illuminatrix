@@ -10,15 +10,15 @@ Lots has happened, and I think my other changes are in another branch. Doing thi
 - Add in opus support and test, it might be best to use opus only for streaming stuff, I probably have enough storage and memory to handle uncompressed PCM data for the project
 - Make sure the PI can't swap
 - Put the PI in a throttled mode for testing to see if it still works
-- Add sound banks
+- **DONE** Add sound banks
 	- override a `dict` to experiment with that
 	- after a brief look, it looks to be a pain in the ass, gonna just make a helper that return a dict
-- A dd tag support, it could be useful, like "stop all game playing sounds and play the error sound"
+- Add tag support, it could be useful, like "stop all game playing sounds and play the error sound"
 - Make code work with mono files
 	- Current workaround: encode to mono then back to stereo
 - Add "PLAY TO ALL" option
 - Add "ALWAYS_PLAY_TO_ALL" option in setup for simulation with OSX
-- Convert mixer to using `logging` 
+- **DONE** Convert mixer to using `logging` 
 	- Stretch goal, maybe ask the API for a crash course of changing logging levels
 - Make the higher level API and integrate it with the code
 - Make one of the simulations work with the new sound stuff

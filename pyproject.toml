@@ -16,6 +16,7 @@ dependencies = [
     "scipy (>=1.15.3,<2.0.0)",
     "pysdl3 (>=0.9.8b3,<0.10.0)",
     "sounddevice (>=0.5.2,<0.6.0)",
+    "json5 (>=0.12.0,<0.13.0)",
 ]
 
 [tool.poetry]

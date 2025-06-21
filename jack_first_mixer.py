@@ -4,9 +4,11 @@ import sys
 import threading
 import time
 import typing
+from dataclasses import dataclass
 from enum import Enum
 
 import jack
+import json5
 import numpy
 import soundfile
 
@@ -20,21 +22,115 @@ class MixerState(Enum):
     SHUTDOWN = 3
 
 
-class Sound:
-    def __init__(self, filename: str, volume: float = 1.0, num_loops: int = 0):
-        self.data: numpy.ndarray
-        self.samplerate: int
-        self.data, self.samplerate = soundfile.read(filename, dtype='float32')
-        if len(self.data.shape) > 1:
+class SoundType(Enum):
+    SOUND = "sound"
+    MUSIC = "music"
+    AMBIENCE = "ambience"
+    VOICE = "voice"
+
+
+@dataclass
+class SoundData:
+    key: str
+    filename: str
+    sound_type: SoundType
+    data: numpy.ndarray
+    samplerate: int
+
+    def create_sound(self, volume: float = 1.0, num_loops: int = 0) -> 'Sound':
+        """Create a Sound object from this SoundData."""
+        return Sound(data=self.data, samplerate=self.samplerate, volume=volume, num_loops=num_loops)
+
+
+def load_sound_file(filename: str) -> tuple[numpy.ndarray, int]:
+    """Load a sound file and return its data and samplerate."""
+    try:
+        data, samplerate = soundfile.read(filename, dtype='float32')
+        if len(data.shape) > 1:
+            # Convert multitrack to mono if needed
             # TODO: I'm trying to get mono but it breaks elsewhere in places in numpy I don't understand yet
             # TODO: I'll kludge it into mono then back to stereo (next if statement)
             # TODO: Learn what vectorizing is in numpy, I'm pretty sure it's applying a thing to an array at phenominal speeds (no python looks), underestand it and the calling mechanic
             # It actuall sounds pretty good, mono comes later
-            self.data = self.data.sum(axis=1) / self.data.shape[1]  # convert stereo to mono
-        if len(self.data.shape) == 1:
+            data = data.sum(axis=1) / data.shape[1]
+        if len(data.shape) == 1:
             # Leftover from ChatGPT, I think this goes in the wrong direction, I want mono
-            # Currently needed to make the other code work, the code assumes the wave is stereo
-            self.data = self.data[:, numpy.newaxis]  # mono to 2D
+            # TODO: Currently needed to make the other code work, the code assumes the wave is stereo
+            data = data[:, numpy.newaxis]  # mono to 2D
+        return data, samplerate
+    except Exception as e:
+        logger.error("Error loading sound file %s: %s", filename, e)
+        raise
+
+
+def load_sound_bank(directory: str) -> dict[str, SoundData]:
+    """Look for a sound_bank_manifest.json file in the directory, and if it exists, load the sounds listed in it."""
+    sound_bank = {}
+    manifest_file = f"{directory}/sound_bank_manifest.json"
+    try:
+        with open(manifest_file, 'r') as f:
+            manifest = json5.load(f)
+            for name, sound_info in manifest.items():
+                filename = sound_info['file']
+                full_path = f"{directory}/{filename}"
+                sound_info['key'] = name
+                match sound_info['type']:
+                    case SoundType.SOUND.value:
+                        pass  # sound_info['type'] = 'sound'  # This is the default, so we don't need to set it
+                    case SoundType.MUSIC.value:
+                        pass  # sound_info['type'] = 'music'
+                    case SoundType.AMBIENCE.value:
+                        pass  # sound_info['type'] = 'ambience'
+                    case SoundType.VOICE.value:
+                        pass  # sound_info['type'] = 'voice'
+                    case _:
+                        logger.warning("Unknown sound type %s for %s, defaulting to 'sound'", sound_info['type'], name)
+                        sound_info['type'] = 'sound'
+
+                # TODO: add support for other sound types, for now load everything as 'sound'
+                data, samplerate = load_sound_file(full_path)
+                sound_bank[name] = SoundData(
+                    key=name,
+                    filename=filename,
+                    sound_type=SoundType(sound_info['type']),
+                    data=data,
+                    samplerate=samplerate,
+                )
+    except FileNotFoundError:
+        logger.warning("No sound bank manifest found in %s", directory)
+        raise
+    except ValueError as e:
+    # except json5.JSONDecodeError as e:
+        logger.error("Error decoding JSON from sound bank manifest: %s", e)
+        raise
+    except KeyError as e:
+        logger.error("Missing key in sound bank manifest: %s", e)
+        raise
+    return sound_bank
+
+
+class Sound:
+    def __init__(self, filename: str = '', data: numpy.ndarray | None = None, samplerate: int | None = None, volume: float = 1.0, num_loops: int = 0):
+        """Initialize a Sound object.
+
+        There are two ways to initialize a Sound object:
+        1. From a file, using the filename parameter.
+        2. From raw data, using the data and samplerate parameters.
+        If both filename and data are provided, data and samplerate takes precedence.
+        """
+        self.data: numpy.ndarray
+        self.samplerate: int
+
+        if data is not None and samplerate is not None:
+            # If data and samplerate are provided, use them directly
+            self.data = data
+            self.samplerate = samplerate
+        elif filename:
+            # If a filename is provided, read the sound file
+            self.data, self.samplerate = load_sound_file(filename)
+        else:
+            raise ValueError("Either filename or data and samplerate must be provided")
+
         self.position: int = 0
         self.channels: int = self.data.shape[1]
         self.volume: float = volume
@@ -186,6 +282,7 @@ class JackMixer:
     def is_anything_playing(self):
         return bool(self.active_sounds)
 
+
 # === Usage Example ===
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -194,12 +291,15 @@ def main():
     # mixer = JackMixer(num_channels=8)
     mixer.startup()
 
-    filename = "LRMonof32.wav"  # Default
-    if len(sys.argv) > 1:
-        filename = sys.argv[1]
+    sound_bank = load_sound_bank("sound_bank_1")
+    snd1 = sound_bank["boom"].create_sound(volume=0.1, num_loops=10)  # Create a sound with volume and number of loops
+    snd2 = sound_bank["boom"].create_sound(num_loops=-1)  # Loop forever
 
-    snd1 = Sound(filename, num_loops=10)
-    snd2 = Sound(filename, num_loops=-1)  # Loop forever
+    # filename = "LRMonof32.wav"  # Default
+    # if len(sys.argv) > 1:
+    #     filename = sys.argv[1]
+    # snd1 = Sound(filename, num_loops=10)
+    # snd2 = Sound(filename, num_loops=-1)  # Loop forever
 
     stop_first_sound_time = 5.0 + time.time()
     mixer.play(snd1, [0])       # Play to channel 0
