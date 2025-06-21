@@ -39,10 +39,12 @@ class LucyWhackAMole(BaseGame):
             self.new_mole_number = random.choice(self.towers_that_are_off)
             tower = self._towers[self.int_to_tower[self.new_mole_number]]
             tower.set_color(RAINBOW[self.new_mole_number])
+            tower.play_sound("boom")
             self.towers_that_are_off.remove(self.new_mole_number)
             if len(self.towers_that_are_off) == 0:
                 for tower in self._towers:
                     tower.set_color((1.0, 0.0, 0.0))
                 print("Wrong!")
                 self.failed = True
+                self._towers.play_sound("siren")
         return False
