@@ -21,6 +21,6 @@ class TowerController:
         for tower in self._towers:
             tower.set_color(color, light)
 
-    def play_sounds(self, sound):
+    def play_sound(self, sound):
         for tower in self._towers:
             tower.play_sound(sound)

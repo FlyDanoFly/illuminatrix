@@ -1,3 +1,9 @@
+"""Jack Sound System for Python - A simple sound mixer using JACK Audio Connection Kit and lightly mimicing the pygame interafce.
+
+This is evolving from a very iterative process, needs a decent amount of cleanup.
+Most important next goal is to get it running with a simulation.
+"""
+
 import logging
 import signal
 import sys
@@ -11,6 +17,9 @@ import jack
 import json5
 import numpy
 import soundfile
+
+from constants import SystemIdentifier
+from SoundSystem import SoundSystem
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +290,51 @@ class JackMixer:
 
     def is_anything_playing(self):
         return bool(self.active_sounds)
+
+
+class JackSoundSystem(SoundSystem):
+    def __init__(self, num_channels: int = 8):
+        super().__init__()
+        self.mixer = JackMixer(num_channels=num_channels)
+
+    def startup(self) -> None:
+        """Start the JACK mixer."""
+        self.mixer.startup()
+
+    def shutdown(self) -> None:
+        """Shutdown the JACK mixer."""
+        self.mixer.stop_all(fade_duration=1.0)
+        # time.sleep(1.2)
+        while self.mixer.is_anything_playing():
+            logger.info("   fading %.3f", self.mixer.client.cpu_load())
+            time.sleep(0.05)
+        self.mixer.shutdown()
+
+    def update(self, delta_ms: float) -> None:
+        """Update the JACK mixer state."""
+        # This method is not implemented in this example, as the mixer processes audio in its own thread.
+        # If needed, you could implement periodic updates or checks here.
+        # Perhaps dealing with streaming data?
+        pass
+
+    def render(self) -> None:
+        """Render the current state of the JACK mixer."""
+        # This method is not implemented in this example, as the mixer processes audio in its own thread.
+        # If needed, you could implement periodic rendering or checks here.
+        pass
+
+    def load_sound_bank(self, directory: str) -> None:
+        """Load a sound bank from the specified directory."""
+        self.sound_bank = load_sound_bank(directory)
+
+    def play(self, system_id: SystemIdentifier, sound: str) -> Sound:
+        """Play a sound from the sound bank."""
+        if sound not in self.sound_bank:
+            raise ValueError(f"Sound {sound} not found in sound bank")
+        sound_data = self.sound_bank[sound]
+        snd = sound_data.create_sound()
+        self.mixer.play(snd, [0])
+        return snd
 
 
 # === Usage Example ===
