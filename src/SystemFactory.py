@@ -34,10 +34,9 @@ class SystemFactory:
         self.context: dict = context or {} # optional shared context, e.g. websocket
         self._light_system = SystemFactory.LIGHT_SYSTEM_MAP[self.mode]()
         self._light_system.setup(**self.context)
-        self._sound_system = SystemFactory.SOUND_SYSTEM_MAP[self.mode](num_channels=2)
+        self._sound_system = SystemFactory.SOUND_SYSTEM_MAP[self.mode]()
         self._sound_system.load_sound_bank("../sound_bank_1")
         # self._sound_system.setup(**self.context)
-
 
     def get_light_system(self) -> LightSystem:
         return self._light_system

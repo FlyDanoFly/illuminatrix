@@ -16,7 +16,7 @@ from LightSystem import LightSystem
 class IlluminatrixClientError(IlluminatrixError):
     pass
 
-logger = logging.getLogger(__file__)
+logger = logging.getLogger(__name__)
 
 # TODO: Remove all mention of the towers in this
 

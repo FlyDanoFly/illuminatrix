@@ -14,4 +14,4 @@ class Tower:
         self.light_system.set(self.system_identifier, color, light)
 
     def play_sound(self, sound):
-        self.sound_system.play(self.system_identifier, sound)
+        self.sound_system.play(sound, self.system_identifier)

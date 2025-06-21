@@ -5,6 +5,7 @@ Most important next goal is to get it running with a simulation.
 """
 
 import logging
+import random
 import signal
 import sys
 import threading
@@ -48,7 +49,9 @@ class SoundData:
 
     def create_sound(self, volume: float = 1.0, num_loops: int = 0) -> 'Sound':
         """Create a Sound object from this SoundData."""
-        return Sound(data=self.data, samplerate=self.samplerate, volume=volume, num_loops=num_loops)
+        # TODO: formalize the key, filename, and sound_type usage
+        ranby = self.key + "-" + "".join(random.choice("abcdefghij") for _ in range(8))
+        return Sound(filename=ranby, data=self.data, samplerate=self.samplerate, volume=volume, num_loops=num_loops)
 
 
 def load_sound_file(filename: str) -> tuple[numpy.ndarray, int]:
@@ -129,7 +132,8 @@ class Sound:
         """
         self.data: numpy.ndarray
         self.samplerate: int
-
+        # TODO: formalize the key, filename, and sound_type usage
+        self.key: str = filename  # Use filename as key, can be overridden later
         if data is not None and samplerate is not None:
             # If data and samplerate are provided, use them directly
             self.data = data
@@ -154,7 +158,7 @@ class Sound:
 
     def __del__(self):
         """Ensure resources are cleaned up."""
-        print("Sound object is being deleted, cleaning up resources.")
+        logger.info("Sound object is being deleted, cleaning up resources.")
         if hasattr(self, 'data'):
             del self.data
         if hasattr(self, 'fade_out_curve'):
@@ -201,7 +205,7 @@ class Sound:
                 fade_values = self.fade_out_curve[self.fade_out_index:self.fade_out_index+fade_len]
                 samples = samples[:fade_len] * fade_values
                 self.fade_out_index += fade_len
-                if self.fade_out_index >= len(self.fade_out_curve):
+                if self.fade_out_index >= len(self.fade_out_curve) or fade_len <= 0:
                     self.fade_out_active = False
                     self.fade_out_comelete = True
 
@@ -218,16 +222,16 @@ class Sound:
 
 
 class JackMixer:
-    def __init__(self, name: str = "jack_mixer", num_channels: int = 8):
+    def __init__(self, name: str = "jack_mixer"):
         # TODO: perhaps make the channel auto detected, as well as the force to stereo?
         self.client: jack.Client = jack.Client(name)
-        self.num_channels: int = num_channels
-        self.outports: list[jack.OwnPort] = [typing.cast("jack.OwnPort", self.client.outports.register(f"out_{i}")) for i in range(num_channels)]
+        self.outports: list[jack.OwnPort] = []
         self.active_sounds: list[tuple[Sound, list[int]]] = []
         self.lock: threading.Lock = threading.Lock()
         self.state: MixerState = MixerState.INIT
         self.shutdown_called: bool = False
         self.client.set_process_callback(self.process)
+        self.force_play_on_all_channels: bool = False
 
     def process(self, _: int):
         # the parameter is the number of frames to process
@@ -262,10 +266,15 @@ class JackMixer:
 
     def _connect_to_physical_outputs(self):
         # Auto-connect to physical outputs
-        system_out = self.client.get_ports(is_physical=True, is_input=True)
-        for i, port in enumerate(self.outports):
-            if i < len(system_out):
-                self.client.connect(port, system_out[i].name)
+        system_out_ports = self.client.get_ports(is_physical=True, is_input=True, is_audio=True, is_midi=False)
+        for i, system_port in enumerate(system_out_ports, start=1):
+            outport = typing.cast("jack.OwnPort", self.client.outports.register(f"out_{i}"))
+            self.client.connect(outport, system_port)
+            self.outports.append(outport)
+        if len(self.outports) == 2:
+            # If we have exactly two output ports, force them to be stereo
+            self.force_play_on_all_channels = True
+            logger.info("Stereo output detected, forcing stereo playback on all channels.")
 
     def shutdown(self):
         if self.shutdown_called or self.state in [MixerState.SHUTDOWN, MixerState.INIT]:
@@ -277,7 +286,17 @@ class JackMixer:
         self.client.close()
         logger.info("Mixer shut down cleanly.")
 
-    def play(self, sound: Sound, channel_map):
+    def play(self, sound: Sound, channel_map=None):
+        """Play a sound on the mixer.
+
+        Args:
+            sound (Sound): The sound to play.
+            channel_map (list[int]): A list of channel indices to play the sound on. Defaults to all channels.
+        """
+        if channel_map is None or self.force_play_on_all_channels:
+            channel_map = list(range(len(self.outports)))
+        if not isinstance(channel_map, list):
+            channel_map = [channel_map]
         if self.state != MixerState.STARTED:
             raise RuntimeError("Mixer must be started to play sounds")
         with self.lock:
@@ -293,9 +312,9 @@ class JackMixer:
 
 
 class JackSoundSystem(SoundSystem):
-    def __init__(self, num_channels: int = 8):
+    def __init__(self):
         super().__init__()
-        self.mixer = JackMixer(num_channels=num_channels)
+        self.mixer = JackMixer()
 
     def startup(self) -> None:
         """Start the JACK mixer."""
@@ -327,22 +346,24 @@ class JackSoundSystem(SoundSystem):
         """Load a sound bank from the specified directory."""
         self.sound_bank = load_sound_bank(directory)
 
-    def play(self, system_id: SystemIdentifier, sound: str) -> Sound:
+    def play(self, sound: str, system_id: SystemIdentifier = None) -> Sound:
         """Play a sound from the sound bank."""
         if sound not in self.sound_bank:
             raise ValueError(f"Sound {sound} not found in sound bank")
         sound_data = self.sound_bank[sound]
         snd = sound_data.create_sound()
-        self.mixer.play(snd, [0])
+        self.mixer.play(snd, system_id)
         return snd
 
+    def are_any_sounds_playing(self) -> bool:
+        """Check if any sounds are currently playing."""
+        return self.mixer.is_anything_playing()
 
 # === Usage Example ===
 def main():
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    mixer = JackMixer(num_channels=2)
-    # mixer = JackMixer(num_channels=8)
+    mixer = JackMixer()
     mixer.startup()
 
     sound_bank = load_sound_bank("sound_bank_1")
