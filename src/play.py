@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)15s() ] %(message)s"
 logging.basicConfig(format=FORMAT, level=logging.INFO)
 
+
 def main():
     """Run an Illuminatrix game from the command line."""
 
@@ -46,7 +47,7 @@ def main():
 
     environment_context = ENVIRONMENT_CONTEXT[options.environment]
     context = {**generic_context, **environment_context}
-    if options.environment in {Environment.EXTERNAL, Environment.LOCAL}:
+    if options.environment in {Environment.WEB, Environment.LOCAL}:
         if not options.id:
             parser.error("running a web simulation requires --id")
             return
@@ -76,6 +77,9 @@ def main():
     prev_time = time.time()
     game.first_frame_update()
 
+    logger_dict = logging.Logger.manager.loggerDict
+    for name in logger_dict:
+        print("-->", name)
     # Start the systems
     for system in systems:
         system.startup()
@@ -110,9 +114,11 @@ def main():
         logger.info("KeyboardInterrupt, quitting")
     finally:
         logger.info("Shutting down gracefully")
+        time.sleep(0.1)
         for system in systems:
             logger.info("    Shutting down: %s", system)
             system.shutdown()
+        time.sleep(0.1)
 
 
 if __name__ == "__main__":

@@ -13,5 +13,5 @@ class Tower:
     def set_color(self, color: ColorType, light: LightPos = LightPos.All):
         self.light_system.set(self.system_identifier, color, light)
 
-    def play_sound(self, sound):
-        self.sound_system.play(self.system_identifier, sound)
+    def play_sound(self, sound, volume: float = 1.0):
+        self.sound_system.play(sound, self.system_identifier)
