@@ -41,7 +41,6 @@ tower_to_system_identifier: dict[TowerEnum, SystemIdentifier] = {
 class Environment(StrEnum):
     EMBEDDED = auto()
     WEB = auto()
-    # LOCAL = auto()
     PRINT = auto()
 
 
@@ -51,9 +50,5 @@ ENVIRONMENT_CONTEXT = {
         "server_address": "wss://houseofsucky.xyz/illuminatrix_simulation_server",
         # "ack_style": "",  # not sure about the scope of this yet
     },
-    # Environment.LOCAL: {
-    #     "server_url": "ws://localhost:8000"
-    #     # "ack_style": "",  # not sure about the scope of this yet
-    # },
     Environment.PRINT: {},
 }
