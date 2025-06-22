@@ -1,17 +1,44 @@
-from constants import ColorType, LightPos, TowerEnum
+import logging
+
+from constants import ColorType, LightPos
 from Tower import Tower
+
+logger = logging.getLogger(__name__)
 
 
 class TowerController:
     def __init__(self, towers: list[Tower], one_indexed: bool = True):
+        # TODO: generate the towers in here rather than having them passed, pass the systems instead
+        """Init the controller for the towers.
+
+        Args:
+            towers - a list of the towers in Illuminatrix
+            one_indexed - TowerController can be indexed by TowerController[TowerEnum] or by integers TowerController[0-indexed] or TowerController[1-indexed], note the one-indexed only applies to referencing them by ints
+        """
         self._towers = towers
         self._one_indexed = one_indexed
 
     def __getitem__(self, index):
-        if isinstance(index, TowerEnum):
+        # TODO: I'm having trouble with isinstance(TowerEnum), doing a workaround until I figure out why
+        # if isinstance(index, TowerEnum):
+        #     # Convert the enmu to a value to index into the array
+        #     index = index.value - 1
+        # elif self._one_indexed:
+        #     index -= 1
+        # return self._towers[index]
+        # print("1-->", id(index))
+        # print("1-->", id(index.__class__))
+        # print("1-->", id(TowerEnum))
+        # for tower in TowerEnum:
+        #     print("2-->", id(tower))
+        # print("3-->", isinstance(index, TowerEnum))
+        # print("3-->", isinstance(index.__class__, TowerEnum))
+        # For the time being, act as if it is a TowerEnum then assume it's an int.
+        try:
             index = index.value - 1
-        elif self._one_indexed:
-            index -= 1
+        except AttributeError:
+            if self._one_indexed:
+                index -= 1
         return self._towers[index]
 
     def __iter__(self):

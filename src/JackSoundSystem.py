@@ -346,12 +346,12 @@ class JackSoundSystem(SoundSystem):
         """Load a sound bank from the specified directory."""
         self.sound_bank = load_sound_bank(directory)
 
-    def play(self, sound: str, system_id: SystemIdentifier = None) -> Sound:
+    def play(self, sound: str, system_id: SystemIdentifier | None = None, volume: float = 1.0) -> Sound:
         """Play a sound from the sound bank."""
         if sound not in self.sound_bank:
             raise ValueError(f"Sound {sound} not found in sound bank")
         sound_data = self.sound_bank[sound]
-        snd = sound_data.create_sound()
+        snd = sound_data.create_sound(volume=volume)
         self.mixer.play(snd, system_id)
         return snd
 

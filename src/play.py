@@ -14,7 +14,6 @@ from Tower import Tower
 from TowerController import TowerController
 from utils import find_game_classes
 
-
 logger = logging.getLogger(__name__)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)15s() ] %(message)s"
 logging.basicConfig(format=FORMAT, level=logging.INFO)
@@ -48,7 +47,7 @@ def main():
 
     environment_context = ENVIRONMENT_CONTEXT[options.environment]
     context = {**generic_context, **environment_context}
-    if options.environment in {Environment.EXTERNAL, Environment.LOCAL}:
+    if options.environment in {Environment.WEB, Environment.LOCAL}:
         if not options.id:
             parser.error("running a web simulation requires --id")
             return

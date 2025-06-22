@@ -1,8 +1,7 @@
 # from DmxLightSystem import DmxLightSystem
-from JackSoundSystem import JackSoundSystem
 from constants import Environment
+from JackSoundSystem import JackSoundSystem
 from LightSystem import LightSystem
-from NullSoundSystem import NullSoundSystem
 from PrintLightSystem import PrintLightSystem
 from PrintSoundSystem import PrintSoundSystem
 from SoundSystem import SoundSystem
@@ -14,14 +13,14 @@ from WebsocketSimulation import WebsocketSimulation
 class SystemFactory:
     LIGHT_SYSTEM_MAP: dict[Environment, LightSystem] = {
         # Environment.EMBEDDED: DmxLightSystem,
-        Environment.EXTERNAL: WebsocketSimulation,
+        Environment.WEB: WebsocketSimulation,
         # Environment.LOCAL: WebRelayLightSystem,
         Environment.PRINT: PrintLightSystem,
     }
     SOUND_SYSTEM_MAP: dict[Environment, SoundSystem] = {
         Environment.EMBEDDED: PrintSoundSystem,
-        Environment.EXTERNAL: JackSoundSystem,
-        # Environment.EXTERNAL: PrintSoundSystem,
+        Environment.WEB: JackSoundSystem,
+        # Environment.WEB: PrintSoundSystem,
         Environment.LOCAL: PrintSoundSystem,
         Environment.PRINT: PrintSoundSystem,
     }
