@@ -1,5 +1,5 @@
 from BaseGame import BaseGame
-from colors import PRIMARY_COLORS
+from colors import PRIMARY_COLORS, WHITE
 from TowerController import TowerController
 from utils import cycle
 
@@ -18,6 +18,11 @@ class Blink(BaseGame):
 
     def update(self, delta_ms: float) -> bool:
         """Returns: True if program should terminate, falsy to continue"""
+        # to test inputs, let's make it white if a key is pressed
+        override = self._towers.any_switch_pressed()
+        if override:
+            self._towers.set_color(WHITE)
+
         self._next_flash -= delta_ms
         if self._next_flash > 0.0:
             return False
@@ -25,5 +30,7 @@ class Blink(BaseGame):
         while self._next_flash < 0.0:
             self._next_flash += self._flash_rate
         self._color = self._color_cycle.__next__()
-        self._towers.set_color(self._color)
+
+        if not override:
+            self._towers.set_color(self._color)
         return False
