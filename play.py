@@ -22,7 +22,7 @@ logging.basicConfig(format=FORMAT, level=logging.INFO)
 def main():
     """Run an Illuminatrix game from the command line."""
 
-    games = {c.__name__: c for c in find_game_classes(".")}
+    games = {c.__name__: c for c in find_game_classes("./games")}
 
     parser = argparse.ArgumentParser(
         prog="play",

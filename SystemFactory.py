@@ -42,7 +42,7 @@ class SystemFactory:
         self._light_system = SystemFactory.LIGHT_SYSTEM_MAP[self.mode]()
         self._light_system.setup(**self.context)
         self._sound_system = SystemFactory.SOUND_SYSTEM_MAP[self.mode]()
-        self._sound_system.load_sound_bank("../sound_bank_1")
+        self._sound_system.load_sound_bank("sound_bank_1")
         # self._sound_system.setup(**self.context)
         self._input_system = SystemFactory.INPUT_SYSTEM_MAP[self.mode](7)
 
