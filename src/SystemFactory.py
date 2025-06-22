@@ -14,14 +14,11 @@ class SystemFactory:
     LIGHT_SYSTEM_MAP: dict[Environment, LightSystem] = {
         # Environment.EMBEDDED: DmxLightSystem,
         Environment.WEB: WebsocketSimulation,
-        # Environment.LOCAL: WebRelayLightSystem,
         Environment.PRINT: PrintLightSystem,
     }
     SOUND_SYSTEM_MAP: dict[Environment, SoundSystem] = {
-        Environment.EMBEDDED: PrintSoundSystem,
+        # Environment.EMBEDDED: PrintSoundSystem,
         Environment.WEB: JackSoundSystem,
-        # Environment.WEB: PrintSoundSystem,
-        Environment.LOCAL: PrintSoundSystem,
         Environment.PRINT: PrintSoundSystem,
     }
 

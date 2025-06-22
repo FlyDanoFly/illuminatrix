@@ -47,7 +47,7 @@ def main():
 
     environment_context = ENVIRONMENT_CONTEXT[options.environment]
     context = {**generic_context, **environment_context}
-    if options.environment in {Environment.WEB, Environment.LOCAL}:
+    if options.environment in {Environment.WEB}:
         if not options.id:
             parser.error("running a web simulation requires --id")
             return
