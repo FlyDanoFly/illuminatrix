@@ -6,7 +6,7 @@ authors = [
     {name = "Dano!",email = "flydanofly@gmail.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = "==3.13.3"
 dependencies = [
     "websockets (>=15.0.1,<16.0.0)",
     "ruff (>=0.11.13,<0.12.0)",
