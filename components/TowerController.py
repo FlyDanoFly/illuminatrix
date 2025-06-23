@@ -1,8 +1,14 @@
 import logging
 
-from constants import ColorType, LightPos, TowerEnum, tower_to_system_identifier
-from SystemFactory import SystemFactory
-from Tower import Tower
+from constants.constants import (
+    ColorType,
+    LightPos,
+    TowerEnum,
+    tower_to_system_identifier,
+)
+from systems.SystemFactory import SystemFactory
+
+from .Tower import Tower
 
 logger = logging.getLogger(__name__)
 

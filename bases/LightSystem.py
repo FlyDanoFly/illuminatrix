@@ -1,4 +1,4 @@
-from BaseSystem import BaseSystem
+from bases.BaseSystem import BaseSystem
 
 
 class LightSystem(BaseSystem):

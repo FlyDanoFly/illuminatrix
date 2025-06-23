@@ -1,6 +1,6 @@
 
-from constants import SystemIdentifier
-from SoundSystem import SoundSystem
+from bases.SoundSystem import SoundSystem
+from constants.constants import SystemIdentifier
 
 
 class NullSoundSystem(SoundSystem):

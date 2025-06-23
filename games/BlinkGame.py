@@ -1,7 +1,8 @@
 from BaseGame import BaseGame
-from colors import PRIMARY_COLORS, WHITE
-from TowerController import TowerController
-from utils import cycle
+
+from components.TowerController import TowerController
+from constants.colors import PRIMARY_COLORS, WHITE
+from utils.utils import cycle
 
 
 class Blink(BaseGame):

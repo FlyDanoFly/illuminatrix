@@ -5,7 +5,7 @@ import sys
 from math import fmod
 from typing import Any
 
-from constants import ColorType
+from constants.constants import ColorType
 
 
 def cycle(cycle_source: list[Any]):

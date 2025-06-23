@@ -2,17 +2,15 @@ import argparse
 import logging
 import time
 
-from BaseSystem import BaseSystem
-from constants import (
+from bases.BaseSystem import BaseSystem
+from components.TowerController import TowerController
+from constants.constants import (
     ENVIRONMENT_CONTEXT,
     Environment,
     TowerEnum,
-    tower_to_system_identifier,
 )
-from SystemFactory import SystemFactory
-from Tower import Tower
-from TowerController import TowerController
-from utils import find_game_classes
+from systems.SystemFactory import SystemFactory
+from utils.utils import find_game_classes
 
 logger = logging.getLogger(__name__)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)15s() ] %(message)s"
@@ -50,7 +48,6 @@ def main():
     if options.environment in {Environment.WEB}:
         if not options.id:
             parser.error("running a web simulation requires --id")
-            return
         context["client_id"] = options.id
 
     systems: list[BaseSystem] = []

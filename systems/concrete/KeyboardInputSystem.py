@@ -1,6 +1,6 @@
-from constants import SystemIdentifier
-from InputSystem import InputSystem
-from KBHit import KBHit
+from bases.InputSystem import InputSystem
+from constants.constants import SystemIdentifier
+from utils.KBHit import KBHit
 
 # TODO: more modes? INSTANT vs HIGH UNTIL READ vs THIS_FRAME vs ??
 

@@ -19,8 +19,8 @@ import json5
 import numpy
 import soundfile
 
-from constants import SystemIdentifier, tower_to_system_identifier
-from SoundSystem import Sound, SoundSystem
+from bases.SoundSystem import Sound, SoundSystem
+from constants.constants import SystemIdentifier, tower_to_system_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -376,7 +376,7 @@ def main():
     mixer = JackMixer()
     mixer.startup()
 
-    sound_bank = load_sound_bank("sound_bank_1")
+    sound_bank = load_sound_bank("sound_banks/lucy_whack_a_mole_1")
     snd1 = sound_bank["boom"].create_sound(volume=0.1, num_loops=10)  # Create a sound with volume and number of loops
     snd2 = sound_bank["boom"].create_sound(num_loops=-1)  # Loop forever
 
