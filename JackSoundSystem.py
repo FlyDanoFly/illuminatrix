@@ -19,8 +19,8 @@ import json5
 import numpy
 import soundfile
 
-from constants import SystemIdentifier
-from SoundSystem import SoundSystem
+from constants import SystemIdentifier, tower_to_system_identifier
+from SoundSystem import Sound, SoundSystem
 
 logger = logging.getLogger(__name__)
 
@@ -47,11 +47,11 @@ class SoundData:
     data: numpy.ndarray
     samplerate: int
 
-    def create_sound(self, volume: float = 1.0, num_loops: int = 0) -> 'Sound':
+    def create_sound(self, volume: float = 1.0, num_loops: int = 0) -> Sound:
         """Create a Sound object from this SoundData."""
         # TODO: formalize the key, filename, and sound_type usage
         ranby = self.key + "-" + "".join(random.choice("abcdefghij") for _ in range(8))
-        return Sound(filename=ranby, data=self.data, samplerate=self.samplerate, volume=volume, num_loops=num_loops)
+        return JackSound(filename=ranby, data=self.data, samplerate=self.samplerate, volume=volume, num_loops=num_loops)
 
 
 def load_sound_file(filename: str) -> tuple[numpy.ndarray, int]:
@@ -121,7 +121,12 @@ def load_sound_bank(directory: str) -> dict[str, SoundData]:
     return sound_bank
 
 
-class Sound:
+class JackSound(Sound):
+    """A class representing a sound that can be played by the mixer.
+
+    This class can be initialized from a file or raw data, and supports looping and volume control.
+    It also supports fading out the sound over a specified duration.
+    """
     def __init__(self, filename: str = '', data: numpy.ndarray | None = None, samplerate: int | None = None, volume: float = 1.0, num_loops: int = 0):
         """Initialize a Sound object.
 
@@ -226,7 +231,7 @@ class JackMixer:
         # TODO: perhaps make the channel auto detected, as well as the force to stereo?
         self.client: jack.Client = jack.Client(name)
         self.outports: list[jack.OwnPort] = []
-        self.active_sounds: list[tuple[Sound, list[int]]] = []
+        self.active_sounds: list[tuple[JackSound, list[int]]] = []
         self.lock: threading.Lock = threading.Lock()
         self.state: MixerState = MixerState.INIT
         self.shutdown_called: bool = False
@@ -286,7 +291,7 @@ class JackMixer:
         self.client.close()
         logger.info("Mixer shut down cleanly.")
 
-    def play(self, sound: Sound, channel_map=None):
+    def play(self, sound: Sound, channel_map: list[int] | None = None):
         """Play a sound on the mixer.
 
         Args:
@@ -346,13 +351,18 @@ class JackSoundSystem(SoundSystem):
         """Load a sound bank from the specified directory."""
         self.sound_bank = load_sound_bank(directory)
 
-    def play(self, sound: str, system_id: SystemIdentifier | None = None, volume: float = 1.0) -> Sound:
+    def play(
+            self,
+            sound: str,
+            system_ids: list[SystemIdentifier ] | None = None,
+            volume: float = 1.0) -> Sound:
         """Play a sound from the sound bank."""
         if sound not in self.sound_bank:
             raise ValueError(f"Sound {sound} not found in sound bank")
+        ids = system_ids or list(tower_to_system_identifier.values())
         sound_data = self.sound_bank[sound]
         snd = sound_data.create_sound(volume=volume)
-        self.mixer.play(snd, system_id)
+        self.mixer.play(snd, ids)
         return snd
 
     def are_any_sounds_playing(self) -> bool:
