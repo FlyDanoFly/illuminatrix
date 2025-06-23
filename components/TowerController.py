@@ -1,13 +1,20 @@
 import logging
 
-from constants import ColorType, LightPos
-from Tower import Tower
+from constants.constants import (
+    ColorType,
+    LightPos,
+    TowerEnum,
+    tower_to_system_identifier,
+)
+from systems.SystemFactory import SystemFactory
+
+from .Tower import Tower
 
 logger = logging.getLogger(__name__)
 
 
 class TowerController:
-    def __init__(self, towers: list[Tower], one_indexed: bool = True):
+    def __init__(self, system_factory: SystemFactory, one_indexed: bool = True):
         # TODO: generate the towers in here rather than having them passed, pass the systems instead
         """Init the controller for the towers.
 
@@ -15,6 +22,19 @@ class TowerController:
             towers - a list of the towers in Illuminatrix
             one_indexed - TowerController can be indexed by TowerController[TowerEnum] or by integers TowerController[0-indexed] or TowerController[1-indexed], note the one-indexed only applies to referencing them by ints
         """
+        self._light_system = system_factory.get_light_system()
+        self._sound_system = system_factory.get_sound_system()
+        self._input_system = system_factory.get_input_system()
+        towers = [
+            Tower(
+                tower_enum,
+                tower_to_system_identifier[tower_enum],
+                self._light_system,
+                self._sound_system,
+                self._input_system,
+            )
+            for tower_enum in TowerEnum
+        ]
         self._towers = towers
         self._one_indexed = one_indexed
 
@@ -51,14 +71,10 @@ class TowerController:
     def play_sound(self, sound):
         # TODO: change to a log
         print(f"Playing sound: {sound}")
-        # TODO: Tower controller should probably have a sound system? This is a temporary solution to play sound on all the towers using the first tower
-        # TODO: alternatively I can call the play_sound method on each tower, it's not a big deal really, but there may be coordination issues if the sound system is not shared
-        self._towers[0]._sound_system.play(sound)
-        # for tower in self._towers:
-        #     tower.play_sound(sound)
+        self._sound_system.play(sound)
 
     def are_any_sounds_playing(self) -> bool:
-        return self._towers[0]._sound_system.are_any_sounds_playing()
+        return self._sound_system.are_any_sounds_playing()
 
     def any_switch_pressed(self) -> bool:
         return any(tower.get_switch_state() for tower in self._towers)

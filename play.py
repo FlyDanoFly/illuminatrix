@@ -2,17 +2,15 @@ import argparse
 import logging
 import time
 
-from BaseSystem import BaseSystem
-from constants import (
+from bases.BaseSystem import BaseSystem
+from components.TowerController import TowerController
+from constants.constants import (
     ENVIRONMENT_CONTEXT,
     Environment,
     TowerEnum,
-    tower_to_system_identifier,
 )
-from SystemFactory import SystemFactory
-from Tower import Tower
-from TowerController import TowerController
-from utils import find_game_classes
+from systems.SystemFactory import SystemFactory
+from utils.utils import find_game_classes
 
 logger = logging.getLogger(__name__)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)15s() ] %(message)s"
@@ -50,29 +48,22 @@ def main():
     if options.environment in {Environment.WEB}:
         if not options.id:
             parser.error("running a web simulation requires --id")
-            return
         context["client_id"] = options.id
 
     systems: list[BaseSystem] = []
 
-    # Instantiate the stuff
+    # Instantiate the systems
     system_factory = SystemFactory(options.environment, context)
-    light_system = system_factory.get_light_system()
-    systems.append(light_system)
-    sound_system = system_factory.get_sound_system()
-    systems.append(sound_system)
-    input_system = system_factory.get_input_system()
-    systems.append(input_system)
-
-    # TODO: Turn the tower generator into a factory
-    towers = [
-        Tower(tower_id, tower_to_system_identifier[tower_id], light_system, sound_system, input_system)
-        for tower_id in TowerEnum
+    systems = [
+        system_factory.get_light_system(),
+        system_factory.get_sound_system(),
+        system_factory.get_input_system(),
     ]
-    tower_controller = TowerController(towers)
+
+    tower_controller = TowerController(system_factory)
+    # TODO: this might pop, black will be better for production
     tower_controller.set_color((1.0, 1.0, 1.0))
 
-    # TODO: instantiate the game
     game_class = games[options.game]
     game = game_class(tower_controller)
 
@@ -82,6 +73,7 @@ def main():
     logger_dict = logging.Logger.manager.loggerDict
     for name in logger_dict:
         print("-->", name)
+
     # Start the systems
     for system in systems:
         system.startup()

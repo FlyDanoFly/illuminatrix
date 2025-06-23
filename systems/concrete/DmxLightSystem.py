@@ -1,6 +1,6 @@
 import logging
 
-from LightSystem import LightSystem
+from bases.LightSystem import LightSystem
 
 logger = logging.getLogger(__name__)
 

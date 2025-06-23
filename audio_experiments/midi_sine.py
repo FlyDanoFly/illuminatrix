@@ -22,10 +22,11 @@ It is also worse:
 It sounds a little better than the original, but still quite boring.
 
 """
-import jack
 import math
 import operator
 import threading
+
+import jack
 
 # First 4 bits of status byte:
 NOTEON = 0x9

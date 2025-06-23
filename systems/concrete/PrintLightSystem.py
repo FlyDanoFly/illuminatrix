@@ -1,5 +1,5 @@
-from constants import ColorType, LightPos, SystemIdentifier
-from LightSystem import LightSystem
+from bases.LightSystem import LightSystem
+from constants.constants import ColorType, LightPos, SystemIdentifier
 
 
 class PrintLightSystem(LightSystem):

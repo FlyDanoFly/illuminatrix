@@ -1,7 +1,7 @@
-from constants import ColorType, LightPos, SystemIdentifier, TowerEnum
-from InputSystem import InputSystem
-from LightSystem import LightSystem
-from SoundSystem import SoundSystem
+from bases.InputSystem import InputSystem
+from bases.LightSystem import LightSystem
+from bases.SoundSystem import SoundSystem
+from constants.constants import ColorType, LightPos, SystemIdentifier, TowerEnum
 
 
 class Tower:

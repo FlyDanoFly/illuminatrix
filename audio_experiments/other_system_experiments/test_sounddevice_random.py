@@ -1,10 +1,11 @@
-import numpy as np
-import sounddevice as sd
-import soundfile as sf
-import time
 import random
 import signal
 import sys
+import time
+
+import numpy as np
+import sounddevice as sd
+import soundfile as sf
 
 # ========== CONFIG ==========
 

@@ -4,13 +4,13 @@
 # ChatGPT thinks that I need to mix maunally with sounddevice
 # I think I'll try jack again
 
+import signal
+import sys
+import time
+
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
-import time
-import random
-import signal
-import sys
 
 # ========== CONFIG ==========
 

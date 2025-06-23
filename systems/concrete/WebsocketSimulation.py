@@ -9,8 +9,8 @@ from urllib.parse import urlparse, urlunparse
 
 from websockets.sync.client import connect
 
-from constants import ColorType, IlluminatrixError, LightPos, SystemIdentifier
-from LightSystem import LightSystem
+from bases.LightSystem import LightSystem
+from constants.constants import ColorType, IlluminatrixError, LightPos, SystemIdentifier
 
 
 class IlluminatrixClientError(IlluminatrixError):

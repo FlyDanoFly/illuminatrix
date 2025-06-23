@@ -1,5 +1,5 @@
-import numpy as np
 import jack
+import numpy as np
 
 client = jack.Client("dual_output_demo")
 out1 = client.outports.register("out1")  # For card 1
@@ -45,6 +45,7 @@ client.connect(out2, "system:playback_2")  # Second card's left channel
 
 print("\nPlaying sound for 5 seconds...")
 import time
+
 time.sleep(5)
 
 client.deactivate()

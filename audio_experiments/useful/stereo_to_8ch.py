@@ -1,9 +1,11 @@
 # From ChatGPT
 
 import argparse
+import os
+
 import numpy as np
 from scipy.io import wavfile
-import os
+
 
 def stereo_to_8ch(input_path: str, output_path: str):
     rate, data = wavfile.read(input_path)

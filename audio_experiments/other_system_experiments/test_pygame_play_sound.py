@@ -1,8 +1,9 @@
-import pygame
 import random
-import time
 import signal
 import sys
+import time
+
+import pygame
 
 # ========== CONFIG ==========
 SOUND_FILE = "boom.wav"  # Must be WAV or OGG (mono or stereo)

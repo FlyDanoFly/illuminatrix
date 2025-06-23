@@ -1,18 +1,16 @@
 # from DmxLightSystem import DmxLightSystem
 from typing import Type
 
-from constants import Environment
-from InputSystem import InputSystem
-from JackSoundSystem import JackSoundSystem
-from KeyboardInputSystem import KeyboardInputSystem
-from LightSystem import LightSystem
-
-# from NullSoundSystem import NullSoundSystem
-from PrintInputSystem import PrintInputSystem
-from PrintLightSystem import PrintLightSystem
-from PrintSoundSystem import PrintSoundSystem
-from SoundSystem import SoundSystem
-from WebsocketSimulation import WebsocketSimulation
+from bases.InputSystem import InputSystem
+from bases.LightSystem import LightSystem
+from bases.SoundSystem import SoundSystem
+from constants.constants import Environment
+from systems.concrete.JackSoundSystem import JackSoundSystem
+from systems.concrete.KeyboardInputSystem import KeyboardInputSystem
+from systems.concrete.PrintInputSystem import PrintInputSystem
+from systems.concrete.PrintLightSystem import PrintLightSystem
+from systems.concrete.PrintSoundSystem import PrintSoundSystem
+from systems.concrete.WebsocketSimulation import WebsocketSimulation
 
 
 class SystemFactory:
@@ -42,8 +40,10 @@ class SystemFactory:
         self._light_system = SystemFactory.LIGHT_SYSTEM_MAP[self.mode]()
         self._light_system.setup(**self.context)
         self._sound_system = SystemFactory.SOUND_SYSTEM_MAP[self.mode]()
-        self._sound_system.load_sound_bank("sound_bank_1")
+        # TODO: move the sound bank loading to the game code
+        self._sound_system.load_sound_bank("sound_banks/lucy_whack_a_mole_1/")
         # self._sound_system.setup(**self.context)
+        # TODO: 
         self._input_system = SystemFactory.INPUT_SYSTEM_MAP[self.mode](7)
 
     def get_light_system(self) -> LightSystem:

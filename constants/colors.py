@@ -1,6 +1,6 @@
 from typing import Final
 
-from constants import ColorType
+from constants.constants import ColorType
 
 WHITE: Final[ColorType] = (1.0, 1.0, 1.0)
 BLACK: Final[ColorType] = (0.0, 0.0, 0.0)

@@ -1,11 +1,10 @@
-#!/usr/bin/env poetry run python
-
 import logging
 
 from BaseGame import BaseGame
-from constants import TowerEnum
-from TowerController import TowerController
-from utils import hsv_to_rgb
+
+from components.TowerController import TowerController
+from constants.constants import TowerEnum
+from utils.utils import hsv_to_rgb
 
 logger = logging.getLogger(__name__)
 

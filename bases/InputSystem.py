@@ -1,6 +1,8 @@
 from abc import abstractmethod
-from BaseSystem import BaseSystem
-from constants import SystemIdentifier
+
+from bases.BaseSystem import BaseSystem
+
+from constants.constants import SystemIdentifier
 
 
 class InputSystem(BaseSystem):
