@@ -1,10 +1,9 @@
 import asyncio
 import threading
-import time
-import numpy as np
-import jack
-from queue import Queue, Empty
+from queue import Empty, Queue
 
+import jack
+import numpy as np
 
 ##
 ## THIS DOESN'T WORK... YET

@@ -1,9 +1,9 @@
 import asyncio
 import threading
 import time
-import numpy as np
-from queue import Queue, Empty
+from queue import Empty, Queue
 
+import numpy as np
 
 ##
 ## THIS DOESN'T WORK... YET

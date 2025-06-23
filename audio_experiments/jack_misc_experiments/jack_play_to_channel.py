@@ -1,8 +1,10 @@
 import sys
-import jack
-import soundfile as sf
-import numpy as np
 import time
+
+import jack
+import numpy as np
+import soundfile as sf
+
 
 def play_to_jack_channel(filename, target_channel):
     client = jack.Client("audio_sender")

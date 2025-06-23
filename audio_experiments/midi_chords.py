@@ -6,8 +6,9 @@ All MIDI events are passed through.
 Two additional events are created for each NoteOn and NoteOff event.
 
 """
-import jack
 import struct
+
+import jack
 
 # First 4 bits of status byte:
 NOTEON = 0x9

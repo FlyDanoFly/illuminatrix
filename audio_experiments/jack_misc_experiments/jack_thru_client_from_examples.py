@@ -9,11 +9,11 @@ If you have a microphone and loudspeakers connected, this might cause an
 acoustical feedback!
 
 """
-import sys
 import os
-import jack
+import sys
 import threading
 
+import jack
 
 argv = iter(sys.argv)
 # By default, use script name without extension as client name:
@@ -35,7 +35,7 @@ event = threading.Event()
 def process(frames):
     assert len(client.inports) == len(client.outports)
     assert frames == client.blocksize
-    for i, o in zip(client.inports, client.outports):
+    for i, o in zip(client.inports, client.outports, strict=False):
         o.get_buffer()[:] = i.get_buffer()
 
 
@@ -67,14 +67,14 @@ with client:
     if not capture:
         raise RuntimeError('No physical capture ports')
 
-    for src, dest in zip(capture, client.inports):
+    for src, dest in zip(capture, client.inports, strict=False):
         client.connect(src, dest)
 
     playback = client.get_ports(is_physical=True, is_input=True)
     if not playback:
         raise RuntimeError('No physical playback ports')
 
-    for src, dest in zip(client.outports, playback):
+    for src, dest in zip(client.outports, playback, strict=False):
         client.connect(src, dest)
 
     print('Press Ctrl+C to stop')

@@ -11,6 +11,7 @@ installed for this to work.
 
 """
 import argparse
+
 try:
     import queue  # Python 3.x
 except ImportError:
@@ -68,7 +69,7 @@ def process(frames):
         stop_callback('Buffer is empty: increase buffersize?')
     if data is None:
         stop_callback()  # Playback is finished
-    for channel, port in zip(data.T, client.outports):
+    for channel, port in zip(data.T, client.outports, strict=False):
         port.get_array()[:] = channel
 
 
@@ -90,7 +91,7 @@ try:
             client.outports.register(f'out_{ch + 1}')
         block_generator = f.blocks(blocksize=blocksize, dtype='float32',
                                    always_2d=True, fill_value=0)
-        for _, data in zip(range(args.buffersize), block_generator):
+        for _, data in zip(range(args.buffersize), block_generator, strict=False):
             q.put_nowait(data)  # Pre-fill queue
         with client:
             if not args.manual:
@@ -102,7 +103,7 @@ try:
                     client.outports[0].connect(target_ports[0])
                     client.outports[0].connect(target_ports[1])
                 else:
-                    for source, target in zip(client.outports, target_ports):
+                    for source, target in zip(client.outports, target_ports, strict=False):
                         source.connect(target)
             timeout = blocksize * args.buffersize / samplerate
             for data in block_generator:

@@ -1,6 +1,7 @@
-import numpy as np
-import jack
 import time
+
+import jack
+import numpy as np
 
 client = jack.Client("dual_output_auto")
 

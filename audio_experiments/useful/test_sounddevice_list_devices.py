@@ -1,5 +1,6 @@
 import sounddevice as sd
 
+
 def list_output_devices():
     print("Available audio output devices:\n")
     devices = sd.query_devices()
