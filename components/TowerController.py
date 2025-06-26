@@ -1,4 +1,5 @@
 import logging
+from typing import Generator, Iterator
 
 from constants.constants import (
     ColorType,
@@ -20,13 +21,14 @@ class TowerController:
 
         Args:
             towers - a list of the towers in Illuminatrix
-            one_indexed - TowerController can be indexed by TowerController[TowerEnum] or by integers TowerController[0-indexed] or TowerController[1-indexed], note the one-indexed only applies to referencing them by ints
+            one_indexed - if True, using `lookup()` will be 1-indexed (1-8), otherwise it will be 0-indexed (0-7)
         """
         self._light_system = system_factory.get_light_system()
         self._sound_system = system_factory.get_sound_system()
         self._input_system = system_factory.get_input_system()
-        towers = [
-            Tower(
+        self._towers: dict[TowerEnum, Tower]
+        self._towers = {
+            tower_enum: Tower(
                 tower_enum,
                 tower_to_system_identifier[tower_enum],
                 self._light_system,
@@ -34,39 +36,49 @@ class TowerController:
                 self._input_system,
             )
             for tower_enum in TowerEnum
-        ]
-        self._towers = towers
+        }
         self._one_indexed = one_indexed
 
-    def __getitem__(self, index):
-        # TODO: I'm having trouble with isinstance(TowerEnum), doing a workaround until I figure out why
-        # if isinstance(index, TowerEnum):
-        #     # Convert the enmu to a value to index into the array
-        #     index = index.value - 1
-        # elif self._one_indexed:
-        #     index -= 1
-        # return self._towers[index]
-        # print("1-->", id(index))
-        # print("1-->", id(index.__class__))
-        # print("1-->", id(TowerEnum))
-        # for tower in TowerEnum:
-        #     print("2-->", id(tower))
-        # print("3-->", isinstance(index, TowerEnum))
-        # print("3-->", isinstance(index.__class__, TowerEnum))
-        # For the time being, act as if it is a TowerEnum then assume it's an int.
-        try:
-            index = index.value - 1
-        except AttributeError:
-            if self._one_indexed:
-                index -= 1
-        return self._towers[index]
+    def lookup(self, index: int) -> Tower:
+        """Lookup a tower by its index, either 0-indexed or 1-indexed.
 
-    def __iter__(self):
+        Args:
+            tower - the index of the tower, either 0-indexed or 1-indexed based on the _one_indexed flag
+
+        Returns:
+            The Tower object at the specified index.
+        """
+        if not self._one_indexed:
+            index += 1
+        key = TowerEnum(index)
+        return self._towers[key]
+
+    def __getitem__(self, key: TowerEnum) -> Tower:
+        return self._towers[key]
+
+    def __iter__(self) -> Iterator[TowerEnum]:
         return iter(self._towers)
 
+    def keys(self) -> Iterator[TowerEnum]:
+        """Yield each tower's enum."""
+        return iter(self._towers)
+
+    def values(self) -> Iterator[Tower]:
+        """Yield each Tower object."""
+        return iter(self._towers.values())
+
+    def items(self) -> Generator[tuple[TowerEnum, Tower]]:
+        """Yield each tower's enum and the corresponding Tower object."""
+        for tower_enum, tower in self._towers.items():
+            yield tower_enum, tower
+
     def set_color(self, color: ColorType, light: LightPos = LightPos.All):
-        for tower in self._towers:
+        for tower in self._towers.values():
             tower.set_color(color, light)
+
+    def load_sound_bank(self, sound_bank: str):
+        """Load a sound bank for the sound system."""
+        self._sound_system.load_sound_bank(sound_bank)
 
     def play_sound(self, sound):
         # TODO: change to a log
@@ -77,4 +89,4 @@ class TowerController:
         return self._sound_system.are_any_sounds_playing()
 
     def any_switch_pressed(self) -> bool:
-        return any(tower.get_switch_state() for tower in self._towers)
+        return any(tower.is_switch_pressed() for tower in self._towers.values())

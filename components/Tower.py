@@ -25,5 +25,5 @@ class Tower:
     def play_sound(self, sound, volume: float = 1.0):
         self._sound_system.play(sound, self._system_identifier)
 
-    def get_switch_state(self) -> bool:
+    def is_switch_pressed(self) -> bool:
         return self._input_system.get_switch_state(self._system_identifier)

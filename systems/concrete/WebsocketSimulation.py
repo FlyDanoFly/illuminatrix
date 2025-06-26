@@ -43,7 +43,7 @@ class WebsocketSimulation(LightSystem):
     DEFAULT_PATH = "ws2"
     DEFAULT_PREFIX = "illuminatrix_simulation_server"
 
-    def setup(
+    def __init__(
             self,
             server_address: str,
             client_id:str,
