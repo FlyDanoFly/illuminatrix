@@ -1,12 +1,10 @@
-#!/usr/bin/env poetry run python
-
 import logging
 import random
 
 from BaseGame import BaseGame
-from constants.colors import DULL_RAINBOW, RAINBOW
-from components.TowerController import TowerController
 
+from components.TowerController import TowerController
+from constants.colors import DULL_RAINBOW, RAINBOW
 from constants.constants import TowerEnum
 
 logger = logging.getLogger(__name__)
@@ -25,7 +23,7 @@ class LucyWhackAMole(BaseGame):
         self.failed = False
 
     def first_frame_update(self) -> None:
-        for idx, tower in enumerate(self._towers):
+        for idx, tower in enumerate(self._towers.values()):
             self.rgb = DULL_RAINBOW[idx]
             tower.set_color(self.rgb)
         return super().first_frame_update()
@@ -37,6 +35,14 @@ class LucyWhackAMole(BaseGame):
             if self._towers.are_any_sounds_playing():
                 return False
             return True
+        if self._towers.any_switch_pressed():
+            for tower_enum, tower in self._towers.items():
+                if tower.is_switch_pressed():
+                    if tower_enum.value in self.towers_that_are_off:
+                        tower.set_color((1.0, 1.0, 1.0))
+                        self.towers_that_are_off.append(tower_enum.value - 1)
+                    else:
+                        print("*"*100)
         if self.elapsed_time >= self.time_between_moles_popping_up:
             self.elapsed_time -= self.time_between_moles_popping_up
             self.new_mole_number = random.choice(self.towers_that_are_off)
@@ -45,7 +51,7 @@ class LucyWhackAMole(BaseGame):
             tower.play_sound("boom")
             self.towers_that_are_off.remove(self.new_mole_number)
             if len(self.towers_that_are_off) == 0:
-                for tower in self._towers:
+                for tower in self._towers.values():
                     tower.set_color((1.0, 0.0, 0.0))
                 print("Wrong!")
                 self.failed = True

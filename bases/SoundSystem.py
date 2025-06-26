@@ -1,7 +1,6 @@
 from abc import abstractmethod
 
 from bases.BaseSystem import BaseSystem
-
 from constants.constants import SystemIdentifier
 
 
