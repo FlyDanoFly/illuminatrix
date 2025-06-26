@@ -39,7 +39,8 @@ class SystemFactory:
         self.context: dict = context or {} # optional shared context, e.g. websocket
         self._light_system = SystemFactory.LIGHT_SYSTEM_MAP[self.mode]()
         self._light_system.setup(**self.context)
-        self._sound_system = SystemFactory.SOUND_SYSTEM_MAP[self.mode]()
+        sound_system = SystemFactory.SOUND_SYSTEM_MAP[self.mode]
+        self._sound_system = sound_system()
         # TODO: move the sound bank loading to the game code
         self._sound_system.load_sound_bank("sound_banks/lucy_whack_a_mole_1/")
         # self._sound_system.setup(**self.context)

@@ -38,11 +38,9 @@ class LucyWhackAMole(BaseGame):
         if self._towers.any_switch_pressed():
             for tower_enum, tower in self._towers.items():
                 if tower.is_switch_pressed():
-                    if tower_enum.value in self.towers_that_are_off:
+                    if tower_enum.value - 1 not in self.towers_that_are_off:
                         tower.set_color((1.0, 1.0, 1.0))
                         self.towers_that_are_off.append(tower_enum.value - 1)
-                    else:
-                        print("*"*100)
         if self.elapsed_time >= self.time_between_moles_popping_up:
             self.elapsed_time -= self.time_between_moles_popping_up
             self.new_mole_number = random.choice(self.towers_that_are_off)
