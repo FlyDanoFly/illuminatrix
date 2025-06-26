@@ -6,7 +6,7 @@ from utils.KBHit import KBHit
 
 
 class KeyboardInputSystem(InputSystem):
-    def __init__(self, num_towers: int):
+    def __init__(self, num_towers: int, **_):
         self._num_towers = num_towers
         self._switch_state: dict[int, bool] = {d: False for d in range(num_towers)}
         self._kbhit = KBHit()

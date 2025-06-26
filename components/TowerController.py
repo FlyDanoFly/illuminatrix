@@ -76,6 +76,10 @@ class TowerController:
         for tower in self._towers.values():
             tower.set_color(color, light)
 
+    def load_sound_bank(self, sound_bank: str):
+        """Load a sound bank for the sound system."""
+        self._sound_system.load_sound_bank(sound_bank)
+
     def play_sound(self, sound):
         # TODO: change to a log
         print(f"Playing sound: {sound}")

@@ -163,7 +163,7 @@ class JackSound(Sound):
 
     def __del__(self):
         """Ensure resources are cleaned up."""
-        logger.info("Sound object is being deleted, cleaning up resources.")
+        logger.debug("Sound object is being deleted, cleaning up resources.")
         if hasattr(self, 'data'):
             del self.data
         if hasattr(self, 'fade_out_curve'):
@@ -231,7 +231,7 @@ class JackMixer:
         # TODO: perhaps make the channel auto detected, as well as the force to stereo?
         self.client: jack.Client = jack.Client(name)
         self.outports: list[jack.OwnPort] = []
-        self.active_sounds: list[tuple[JackSound, list[int]]] = []
+        self.active_sounds: list[tuple[Sound, list[int]]] = []
         self.lock: threading.Lock = threading.Lock()
         self.state: MixerState = MixerState.INIT
         self.shutdown_called: bool = False
@@ -291,7 +291,7 @@ class JackMixer:
         self.client.close()
         logger.info("Mixer shut down cleanly.")
 
-    def play(self, sound: Sound, channel_map: list[int] | None = None):
+    def play(self, sound: Sound, channel_map: list[int] | int | None = None):
         """Play a sound on the mixer.
 
         Args:
@@ -347,9 +347,10 @@ class JackSoundSystem(SoundSystem):
         # If needed, you could implement periodic rendering or checks here.
         pass
 
-    def load_sound_bank(self, directory: str) -> None:
+    def load_sound_bank(self, path: str) -> None:
         """Load a sound bank from the specified directory."""
-        self.sound_bank = load_sound_bank(directory)
+        logger.info("Loading sound bank from %s", path)
+        self.sound_bank = load_sound_bank(path)
 
     def play(
             self,

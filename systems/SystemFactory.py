@@ -1,6 +1,4 @@
 # from DmxLightSystem import DmxLightSystem
-from typing import Type
-
 from bases.InputSystem import InputSystem
 from bases.LightSystem import LightSystem
 from bases.SoundSystem import SoundSystem
@@ -14,17 +12,17 @@ from systems.concrete.WebsocketSimulation import WebsocketSimulation
 
 
 class SystemFactory:
-    LIGHT_SYSTEM_MAP: dict[Environment, LightSystem] = {
+    LIGHT_SYSTEM_MAP: dict[Environment, type[LightSystem]] = {
         # Environment.EMBEDDED: DmxLightSystem,
         Environment.WEB: WebsocketSimulation,
         Environment.PRINT: PrintLightSystem,
     }
-    SOUND_SYSTEM_MAP: dict[Environment, SoundSystem] = {
+    SOUND_SYSTEM_MAP: dict[Environment, type[SoundSystem]] = {
         # Environment.EMBEDDED: PrintSoundSystem,
         Environment.WEB: JackSoundSystem,
         Environment.PRINT: PrintSoundSystem,
     }
-    INPUT_SYSTEM_MAP: dict[Environment, Type[InputSystem]] = {
+    INPUT_SYSTEM_MAP: dict[Environment, type[InputSystem]] = {
         # Environment.EMBEDDED: PrintInputSystem,
         Environment.WEB: KeyboardInputSystem,
         Environment.PRINT: PrintInputSystem,
@@ -37,15 +35,11 @@ class SystemFactory:
     def __init__(self, mode: Environment, context: dict | None=None):
         self.mode: Environment = mode
         self.context: dict = context or {} # optional shared context, e.g. websocket
-        self._light_system = SystemFactory.LIGHT_SYSTEM_MAP[self.mode]()
-        self._light_system.setup(**self.context)
+        self._light_system = SystemFactory.LIGHT_SYSTEM_MAP[self.mode](**self.context)
+        # self._light_system.setup(**self.context)
         sound_system = SystemFactory.SOUND_SYSTEM_MAP[self.mode]
         self._sound_system = sound_system()
-        # TODO: move the sound bank loading to the game code
-        self._sound_system.load_sound_bank("sound_banks/lucy_whack_a_mole_1/")
-        # self._sound_system.setup(**self.context)
-        # TODO: 
-        self._input_system = SystemFactory.INPUT_SYSTEM_MAP[self.mode](7)
+        self._input_system = SystemFactory.INPUT_SYSTEM_MAP[self.mode](**self.context)
 
     def get_light_system(self) -> LightSystem:
         return self._light_system
