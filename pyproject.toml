@@ -8,15 +8,16 @@ authors = [
 readme = "README.md"
 requires-python = "==3.13.3"
 dependencies = [
-    "websockets (>=15.0.1,<16.0.0)",
-    "ruff (>=0.11.13,<0.12.0)",
     "jack-client (>=0.5.5,<0.6.0)",
-    "soundfile (>=0.13.1,<0.14.0)",
-    "numpy (>=2.3.0,<3.0.0)",
-    "scipy (>=1.15.3,<2.0.0)",
-    "pysdl3 (>=0.9.8b3,<0.10.0)",
-    "sounddevice (>=0.5.2,<0.6.0)",
     "json5 (>=0.12.0,<0.13.0)",
+    "numpy (>=2.3.0,<3.0.0)",
+    "pysdl3 (>=0.9.8b3,<0.10.0)",
+    "python-statemachine (>=2.5.0,<3.0.0)",
+    "ruff (>=0.11.13,<0.12.0)",
+    "scipy (>=1.15.3,<2.0.0)",
+    "sounddevice (>=0.5.2,<0.6.0)",
+    "soundfile (>=0.13.1,<0.14.0)",
+    "websockets (>=15.0.1,<16.0.0)",
 ]
 
 [tool.poetry]

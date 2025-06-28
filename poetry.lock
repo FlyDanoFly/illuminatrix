@@ -842,6 +842,21 @@ packaging = "*"
 requests = "*"
 
 [[package]]
+name = "python-statemachine"
+version = "2.5.0"
+description = "Python Finite State Machines made easy."
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "python_statemachine-2.5.0-py3-none-any.whl", hash = "sha256:0ed53846802c17037fcb2a92323f4bc0c833290fa9d17a3587c50886c1541e62"},
+    {file = "python_statemachine-2.5.0.tar.gz", hash = "sha256:ae88cd22e47930b92b983a2176e61d811e571b69897be2568ec812c2885fb93a"},
+]
+
+[package.extras]
+diagrams = ["pydot (>=2.0.0)"]
+
+[[package]]
 name = "requests"
 version = "2.32.4"
 description = "Python HTTP for Humans."
@@ -1216,5 +1231,5 @@ propcache = ">=0.2.1"
 
 [metadata]
 lock-version = "2.1"
-python-versions = ">=3.13"
-content-hash = "36c3d045ea4b7aff8a7618cd6136aa49778e705d5254ce167d9825aac21cfb35"
+python-versions = "==3.13.3"
+content-hash = "6ecd4fab4da6af81ea9d89ebfbd58f9d00397777903a2bf992fa90f2e115e98e"
