@@ -5,6 +5,7 @@ from statemachine import State
 
 from components.TowerController import TowerController
 from constants.colors import DULL_RAINBOW, RAINBOW
+from constants.constants import TowerEnum
 
 logger = logging.getLogger(__name__)
 
@@ -93,18 +94,15 @@ class DanoWhackAMoleGame(BaseStatemachineGame):
         """Handle the playing state."""
         self._elapsed_time_secs += delta_ms
 
-        if self._towers.any_switch_pressed():
-            for tower_enum, tower in self._towers.items():
-                if tower.is_switch_pressed():
-                    if tower_enum not in self._available_towers:
-                        tower.set_color(self._tower_color_low[tower_enum])
-                        self._available_towers.add(tower_enum)
-                        logger.info(f"Whacked mole at {tower_enum.name}!")
-                    else:
-                        # TODO: need to detect switch transitions, not just "on-ness", for ignore bad presses
-                        pass
-                        # logger.warning(f"Whack failed at {tower_enum.name}!")
-                        # self.lost_game()
+        for tower_enum, tower in self._towers.items():
+            if tower.is_switch_transition_down():
+                if tower_enum not in self._available_towers:
+                    tower.set_color(self._tower_color_low[tower_enum])
+                    self._available_towers.add(tower_enum)
+                    logger.info(f"Whacked mole at {tower_enum.name}!")
+                else:
+                    logger.info(f"Whack failed at {tower_enum.name}!")
+                    self.lost_game()
 
         if self._elapsed_time_secs >= self._time_between_moles_popping_up_sec:
             self._elapsed_time_secs -= self._time_between_moles_popping_up_sec

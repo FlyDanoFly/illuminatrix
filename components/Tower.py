@@ -27,3 +27,9 @@ class Tower:
 
     def is_switch_pressed(self) -> bool:
         return self._input_system.get_switch_state(self._system_identifier)
+
+    def is_switch_transition_down(self) -> bool:
+        return self._input_system.get_switch_transition_down(self._system_identifier)
+
+    def is_switch_transition_up(self) -> bool:
+        return self._input_system.get_switch_transition_up(self._system_identifier)
