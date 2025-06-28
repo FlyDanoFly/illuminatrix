@@ -76,7 +76,18 @@ def load_sound_file(filename: str) -> tuple[numpy.ndarray, int]:
 
 
 def load_sound_bank(directory: str) -> dict[str, SoundData]:
-    """Look for a sound_bank_manifest.json file in the directory, and if it exists, load the sounds listed in it."""
+    """
+    Look for a sound_bank_manifest.json file in the directory, and if it exists, load the sounds listed in it.
+
+    The manifest should be a JSON5 file with the following structure:
+    [
+        "sound_name": {
+            "file": "path/to/sound/file.wav",
+            "type": "sound"  # or "music", "ambience", "voice"
+        },
+        ...
+    ]
+    """
     sound_bank = {}
     manifest_file = f"{directory}/sound_bank_manifest.json"
     try:
@@ -85,7 +96,6 @@ def load_sound_bank(directory: str) -> dict[str, SoundData]:
             for name, sound_info in manifest.items():
                 filename = sound_info['file']
                 full_path = f"{directory}/{filename}"
-                sound_info['key'] = name
                 match sound_info['type']:
                     case SoundType.SOUND.value:
                         pass  # sound_info['type'] = 'sound'  # This is the default, so we don't need to set it
