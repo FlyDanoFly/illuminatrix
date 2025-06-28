@@ -85,6 +85,10 @@ class TowerController:
         print(f"Playing sound: {sound}")
         self._sound_system.play(sound)
 
+    def fade_out(self, fade_time: float = 0.5):
+        """Fade out all sounds."""
+        self._sound_system.stop_all(fade_time)
+
     def are_any_sounds_playing(self) -> bool:
         return self._sound_system.are_any_sounds_playing()
 
