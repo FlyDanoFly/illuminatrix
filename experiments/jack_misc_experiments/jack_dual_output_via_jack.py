@@ -1,3 +1,5 @@
+import time
+
 import jack
 import numpy as np
 
@@ -44,7 +46,6 @@ client.connect(out1, "system:playback_1")  # First card's left channel
 client.connect(out2, "system:playback_2")  # Second card's left channel
 
 print("\nPlaying sound for 5 seconds...")
-import time
 
 time.sleep(5)
 

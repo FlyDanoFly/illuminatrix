@@ -34,7 +34,7 @@ def process(frames):
         return
 
     # chunk1 = wave1[frame_cursor:end]
-    for idx, thingy in enumerate(thingys):
+    for thingy in thingys:
         # print(f"procss: {idx}")
         chunk = thingy["wave"][frame_cursor:end]
         thingy["out"].get_buffer()[:] = chunk
@@ -74,7 +74,8 @@ if len(card_keys) < 2:
 print("Playing on:")
 for idx, card_key in enumerate(card_keys, start=1):
     print("creating", idx)
-    if idx != 2: continue
+    if idx != 2:
+        continue
     for iidx, card_sub_key in enumerate(card_groups[card_key]):
         thingy = {
             "out":  client.outports.register(f"out{idx}{iidx}"),
