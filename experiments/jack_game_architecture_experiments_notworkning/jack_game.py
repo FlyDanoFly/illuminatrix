@@ -106,8 +106,8 @@ def main():
     out = client.outports.register("out")
 
     # Set sample rate and block size from JACK
-    sample_rate = client.samplerate
-    block_size = client.blocksize
+    # sample_rate = client.samplerate
+    # block_size = client.blocksize
 
     @client.set_process_callback
     def process(frames):

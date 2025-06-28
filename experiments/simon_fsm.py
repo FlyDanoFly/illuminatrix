@@ -5,6 +5,7 @@ from statemachine import State, StateMachine
 
 from games import BaseGame
 
+
 class BaseStateMachineGame(StateMachine, BaseGame):
     """Base class for games using a state machine."""
     
