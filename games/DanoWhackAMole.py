@@ -28,6 +28,8 @@ class DanoWhackAMoleGame(BaseStatemachineGame):
         super().__init__()
 
         self._towers = tower_controller
+        self._towers.load_sound_bank("sound_banks/lucy_whack_a_mole_1/")
+
         self._available_towers = set(tower_controller)
 
         self._tower_color_low = dict(zip(tower_controller, DULL_RAINBOW, strict=True))
@@ -86,7 +88,7 @@ class DanoWhackAMoleGame(BaseStatemachineGame):
         tower_enum = self._available_towers.pop()
         tower = self._towers[tower_enum]
         tower.set_color(self._tower_color_high[tower_enum])
-        # tower.play_sound("boom")
+        tower.play_sound("boom")
         logger.info(f"Mole popped at {tower_enum.name}!")
 
     def do_playing(self, delta_ms) -> ShouldStop:
@@ -111,6 +113,7 @@ class DanoWhackAMoleGame(BaseStatemachineGame):
     def on_enter_lost(self) -> None:
         """Handle the lost state."""
         logger.info("You lost! Game over.")
+        self._towers.play_sound("siren")
         for tower in self._towers.values():
             tower.set_color((1.0, 0.0, 0.0))
         self._elapsed_time_secs = 0.0
