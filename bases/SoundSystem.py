@@ -15,7 +15,7 @@ class SoundSystem(BaseSystem):
         pass
 
     @abstractmethod
-    def play(self, sound: str, system_ids: list[SystemIdentifier] | None = None, volume: float = 1.0) -> Sound:
+    def play(self, sound: str, system_ids: list[SystemIdentifier] | None = None, volume: float = 1.0, num_loops: int = 1) -> Sound:
         pass
 
     @abstractmethod

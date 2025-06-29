@@ -223,9 +223,9 @@ class JackSound(Sound):
                 buf[:block_len] += samples * self.volume
                 position += block_len
 
-            if position >= len(self.data) and self.loops != 0:
-                self.loops -= 1
-                position = 0
+        if position >= len(self.data) and self.loops != 0:
+            self.loops -= 1
+            position = 0
         self.position = position
 
 
@@ -233,6 +233,8 @@ class JackMixer:
     def __init__(self, name: str = "jack_mixer"):
         # TODO: perhaps make the channel auto detected, as well as the force to stereo?
         self.client: jack.Client = jack.Client(name)
+        # If the server is already running, use this instead
+        # self.client: jack.Client = jack.Client(name, no_start_server=True, servername="jacko_mixer")
         self.outports: list[jack.OwnPort] = []
         self.active_sounds: list[tuple[Sound, list[int]]] = []
         self.lock: threading.Lock = threading.Lock()
@@ -291,8 +293,11 @@ class JackMixer:
         self.state = MixerState.SHUTDOWN
         logger.info("Shutting down JACK mixer...")
         self.client.deactivate()
+        time.sleep(0.5)  # Give one last pause to let the terminal flush all text
         self.client.close()
+        time.sleep(0.5)  # Give one last pause to let the terminal flush all text
         logger.info("Mixer shut down cleanly.")
+        time.sleep(0.5)  # Give one last pause to let the terminal flush all text
 
     def play(self, sound: Sound, channel_map: list[int] | int | None = None):
         """Play a sound on the mixer.
@@ -342,7 +347,7 @@ class JackSoundSystem(SoundSystem):
         # This method is not implemented in this example, as the mixer processes audio in its own thread.
         # If needed, you could implement periodic updates or checks here.
         # Perhaps dealing with streaming data?
-        pass
+        logger.debug("Audio cpu_load(): %s", self.mixer.client.cpu_load())
 
     def render(self) -> None:
         """Render the current state of the JACK mixer."""
@@ -359,13 +364,15 @@ class JackSoundSystem(SoundSystem):
             self,
             sound: str,
             system_ids: list[SystemIdentifier ] | None = None,
-            volume: float = 1.0) -> Sound:
+            volume: float = 1.0,
+            num_loops: int = 0) -> Sound:
         """Play a sound from the sound bank."""
         if sound not in self.sound_bank:
             raise ValueError(f"Sound {sound} not found in sound bank")
         ids = system_ids or list(tower_to_system_identifier.values())
+        # ids = [1]
         sound_data = self.sound_bank[sound]
-        snd = sound_data.create_sound(volume=volume)
+        snd = sound_data.create_sound(volume=volume, num_loops=num_loops)
         self.mixer.play(snd, ids)
         return snd
 
