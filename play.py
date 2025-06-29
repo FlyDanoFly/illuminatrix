@@ -14,7 +14,7 @@ from utils.utils import find_game_classes
 
 logger = logging.getLogger(__name__)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)15s() ] %(message)s"
-logging.basicConfig(format=FORMAT, level=logging.INFO)
+logging.basicConfig(format=FORMAT, level=logging.WARNING)
 
 
 def main():
@@ -70,9 +70,11 @@ def main():
     prev_time = time.time()
     game.first_frame_update()
 
-    logger_dict = logging.Logger.manager.loggerDict
-    for name in logger_dict:
-        print("-->", name)
+    # Uncomment to see all the loggers, the long term intent is to learn
+    # how to set individual logging levels on different parts of the code
+    # logger_dict = logging.Logger.manager.loggerDict
+    # for name in logger_dict:
+    #     print("-->", name)
 
     # Start the systems
     for system in systems:

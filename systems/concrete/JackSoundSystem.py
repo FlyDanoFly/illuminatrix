@@ -59,16 +59,8 @@ def load_sound_file(filename: str) -> tuple[numpy.ndarray, int]:
     try:
         data, samplerate = soundfile.read(filename, dtype='float32')
         if len(data.shape) > 1:
-            # Convert multitrack to mono if needed
-            # TODO: I'm trying to get mono but it breaks elsewhere in places in numpy I don't understand yet
-            # TODO: I'll kludge it into mono then back to stereo (next if statement)
-            # TODO: Learn what vectorizing is in numpy, I'm pretty sure it's applying a thing to an array at phenominal speeds (no python looks), underestand it and the calling mechanic
-            # It actuall sounds pretty good, mono comes later
+            logger.warning("Loaded multitrack sound file %s, converting to mono.", filename)
             data = data.sum(axis=1) / data.shape[1]
-        if len(data.shape) == 1:
-            # Leftover from ChatGPT, I think this goes in the wrong direction, I want mono
-            # TODO: Currently needed to make the other code work, the code assumes the wave is stereo
-            data = data[:, numpy.newaxis]  # mono to 2D
         return data, samplerate
     except Exception as e:
         logger.error("Error loading sound file %s: %s", filename, e)
@@ -159,8 +151,9 @@ class JackSound(Sound):
         else:
             raise ValueError("Either filename or data and samplerate must be provided")
 
+        assert len(self.data.shape) == 1, "Sound data must be 1D (mono), got shape: {}".format(self.data.shape)
+        self.channels: int = 1
         self.position: int = 0
-        self.channels: int = self.data.shape[1]
         self.volume: float = volume
         self.loops: int = num_loops
         # TODO: if I get into adding reltime effects, make this an effect
@@ -212,7 +205,7 @@ class JackSound(Sound):
             remaining = len(self.data) - position
             block_len = min(frames, remaining)
 
-            samples = self.data[position:position+block_len, i % self.channels]
+            samples = self.data[position:position+block_len]
 
             if self.fade_out_active or self.fade_out_comelete:
                 fade_remaining = len(self.fade_out_curve) - self.fade_out_index
