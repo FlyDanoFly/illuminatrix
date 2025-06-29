@@ -80,7 +80,7 @@ class TowerController:
         """Load a sound bank for the sound system."""
         self._sound_system.load_sound_bank(sound_bank)
 
-    def play_sound(self, sound, num_loops=1):
+    def play_sound(self, sound, num_loops=0):
         # TODO: change to a log
         print(f"Playing sound: {sound}")
         self._sound_system.play(sound, num_loops=num_loops)
