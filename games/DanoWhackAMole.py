@@ -113,7 +113,7 @@ class DanoWhackAMoleGame(BaseStatemachineGame):
     def on_enter_lost(self) -> None:
         """Handle the lost state."""
         logger.info("You lost! Game over.")
-        self._towers.play_sound("siren")
+        self._towers.play_sound("siren", num_loops=1)
         for tower in self._towers.values():
             tower.set_color((1.0, 0.0, 0.0))
         self._elapsed_time_secs = 0.0
@@ -123,4 +123,7 @@ class DanoWhackAMoleGame(BaseStatemachineGame):
         self._elapsed_time_secs += delta_ms
         red = max(0.0, 1.0 - (self._elapsed_time_secs / (MOLES_FAIL_FADE_SEC)))
         self._towers.set_color((red, 0.0, 0.0))
-        return self._elapsed_time_secs >= MOLES_FAIL_FADE_SEC
+        return (
+            self._elapsed_time_secs >= MOLES_FAIL_FADE_SEC
+            and not self._towers.are_any_sounds_playing()
+        )

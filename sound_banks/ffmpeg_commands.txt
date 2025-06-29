@@ -1,0 +1,30 @@
+# TODO: Move this to the /docs directory
+
+
+#
+# To determine duration of a sound file
+ffprobe -i INPUT_FILE -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1
+# output will be in seconds, e.g. 123.456789
+
+
+#
+# To normalize
+
+# first run the following command to get the loudness of the file
+ffmpeg -i INPUT_FILE -filter:a "volumedetect" -map 0:a -f null /dev/null
+
+# Find this line:
+# [Parsed_volumedetect_0 @ 0x600003858420] n_samples: 20620
+# [Parsed_volumedetect_0 @ 0x600003858420] mean_volume: -14.6 dB
+# [Parsed_volumedetect_0 @ 0x600003858420] max_volume: -3.0 dB  <=== THIS LINE
+# in the following XYZ is the positive value of the max_volume, eg -3.0 dB becomes 3dbdb
+ffmpeg -i INPUT_FILE -filter:a "volume=XYZdB" -c:v copy -c:a pcm_s32le -ar 48000 -ac 1 -channel_layout mono OUTPUT_FILE
+
+#
+# To convert
+
+# To convert to what the Raspberry Pi + HiFiBerry DAC+ Pro + Jack Audio Player seems to need
+ffmpeg -i INPUT_FILE -c:a pcm_s32le -ar 48000 -ac 1 -channel_layout mono OUTPUT_FILE
+
+# Note this does volue normalization as well
+ffmpeg -i INPUT_FILE -filter:a "volume=THE_DBSdB" -c:v copy -c:a pcm_s32le -ar 48000 -ac 1 -channel_layout mono OUTPUT_FILE

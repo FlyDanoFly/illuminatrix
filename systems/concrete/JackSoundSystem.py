@@ -59,16 +59,8 @@ def load_sound_file(filename: str) -> tuple[numpy.ndarray, int]:
     try:
         data, samplerate = soundfile.read(filename, dtype='float32')
         if len(data.shape) > 1:
-            # Convert multitrack to mono if needed
-            # TODO: I'm trying to get mono but it breaks elsewhere in places in numpy I don't understand yet
-            # TODO: I'll kludge it into mono then back to stereo (next if statement)
-            # TODO: Learn what vectorizing is in numpy, I'm pretty sure it's applying a thing to an array at phenominal speeds (no python looks), underestand it and the calling mechanic
-            # It actuall sounds pretty good, mono comes later
+            logger.warning("Loaded multitrack sound file %s, converting to mono.", filename)
             data = data.sum(axis=1) / data.shape[1]
-        if len(data.shape) == 1:
-            # Leftover from ChatGPT, I think this goes in the wrong direction, I want mono
-            # TODO: Currently needed to make the other code work, the code assumes the wave is stereo
-            data = data[:, numpy.newaxis]  # mono to 2D
         return data, samplerate
     except Exception as e:
         logger.error("Error loading sound file %s: %s", filename, e)
@@ -159,8 +151,9 @@ class JackSound(Sound):
         else:
             raise ValueError("Either filename or data and samplerate must be provided")
 
+        assert len(self.data.shape) == 1, "Sound data must be 1D (mono), got shape: {}".format(self.data.shape)
+        self.channels: int = 1
         self.position: int = 0
-        self.channels: int = self.data.shape[1]
         self.volume: float = volume
         self.loops: int = num_loops
         # TODO: if I get into adding reltime effects, make this an effect
@@ -212,7 +205,7 @@ class JackSound(Sound):
             remaining = len(self.data) - position
             block_len = min(frames, remaining)
 
-            samples = self.data[position:position+block_len, i % self.channels]
+            samples = self.data[position:position+block_len]
 
             if self.fade_out_active or self.fade_out_comelete:
                 fade_remaining = len(self.fade_out_curve) - self.fade_out_index
@@ -230,9 +223,9 @@ class JackSound(Sound):
                 buf[:block_len] += samples * self.volume
                 position += block_len
 
-            if position >= len(self.data) and self.loops != 0:
-                self.loops -= 1
-                position = 0
+        if position >= len(self.data) and self.loops != 0:
+            self.loops -= 1
+            position = 0
         self.position = position
 
 
@@ -240,6 +233,8 @@ class JackMixer:
     def __init__(self, name: str = "jack_mixer"):
         # TODO: perhaps make the channel auto detected, as well as the force to stereo?
         self.client: jack.Client = jack.Client(name)
+        # If the server is already running, use this instead
+        # self.client: jack.Client = jack.Client(name, no_start_server=True, servername="jacko_mixer")
         self.outports: list[jack.OwnPort] = []
         self.active_sounds: list[tuple[Sound, list[int]]] = []
         self.lock: threading.Lock = threading.Lock()
@@ -298,8 +293,11 @@ class JackMixer:
         self.state = MixerState.SHUTDOWN
         logger.info("Shutting down JACK mixer...")
         self.client.deactivate()
+        time.sleep(0.5)  # Give one last pause to let the terminal flush all text
         self.client.close()
+        time.sleep(0.5)  # Give one last pause to let the terminal flush all text
         logger.info("Mixer shut down cleanly.")
+        time.sleep(0.5)  # Give one last pause to let the terminal flush all text
 
     def play(self, sound: Sound, channel_map: list[int] | int | None = None):
         """Play a sound on the mixer.
@@ -349,7 +347,7 @@ class JackSoundSystem(SoundSystem):
         # This method is not implemented in this example, as the mixer processes audio in its own thread.
         # If needed, you could implement periodic updates or checks here.
         # Perhaps dealing with streaming data?
-        pass
+        logger.debug("Audio cpu_load(): %s", self.mixer.client.cpu_load())
 
     def render(self) -> None:
         """Render the current state of the JACK mixer."""
@@ -366,13 +364,15 @@ class JackSoundSystem(SoundSystem):
             self,
             sound: str,
             system_ids: list[SystemIdentifier ] | None = None,
-            volume: float = 1.0) -> Sound:
+            volume: float = 1.0,
+            num_loops: int = 0) -> Sound:
         """Play a sound from the sound bank."""
         if sound not in self.sound_bank:
             raise ValueError(f"Sound {sound} not found in sound bank")
         ids = system_ids or list(tower_to_system_identifier.values())
+        # ids = [1]
         sound_data = self.sound_bank[sound]
-        snd = sound_data.create_sound(volume=volume)
+        snd = sound_data.create_sound(volume=volume, num_loops=num_loops)
         self.mixer.play(snd, ids)
         return snd
 
