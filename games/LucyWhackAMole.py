@@ -1,8 +1,7 @@
 import logging
 import random
 
-from BaseGame import BaseGame
-
+from bases import BaseGame
 from components.TowerController import TowerController
 from constants.colors import DULL_RAINBOW, RAINBOW
 from constants.constants import TowerEnum
@@ -27,11 +26,10 @@ class LucyWhackAMole(BaseGame):
         for idx, tower in enumerate(self._towers.values()):
             self.rgb = DULL_RAINBOW[idx]
             tower.set_color(self.rgb)
-        return super().first_frame_update()
 
-    def update(self, delta_ms: float) -> bool:
-        logger.debug("LucyTest.update()", delta_ms)
-        self.elapsed_time += delta_ms
+    def update(self, delta_secs: float) -> bool:
+        logger.debug("LucyTest.update()", delta_secs)
+        self.elapsed_time += delta_secs
         if self.failed:
             if self._towers.are_any_sounds_playing():
                 return False

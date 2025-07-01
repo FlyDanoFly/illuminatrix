@@ -7,7 +7,6 @@ class IlluminatrixError(Exception):
 
 
 type ColorType = tuple[float, float, float]
-type SystemIdentifier = int
 
 
 class TowerEnum(Enum):
@@ -28,16 +27,6 @@ class LightPos(Flag):
     All = Tower_top | Tower_bottom | Pad_top | Pad_bottom
 
 
-tower_to_system_identifier: dict[TowerEnum, SystemIdentifier] = {
-    TowerEnum.Tower_1: 0,
-    TowerEnum.Tower_2: 1,
-    TowerEnum.Tower_3: 2,
-    TowerEnum.Tower_4: 3,
-    TowerEnum.Tower_5: 4,
-    TowerEnum.Tower_6: 5,
-    TowerEnum.Tower_7: 6,
-}
-
 class Environment(StrEnum):
     EMBEDDED = auto()
     WEB = auto()
@@ -45,10 +34,25 @@ class Environment(StrEnum):
 
 
 ENVIRONMENT_CONTEXT = {
-    Environment.EMBEDDED: {},
-    Environment.WEB: {
-        "server_address": "wss://houseofsucky.xyz/illuminatrix_simulation_server",
-        # "ack_style": "",  # not sure about the scope of this yet
+    Environment.EMBEDDED: {
+        "light_system": {},
+        "sound_system": {},
+        "input_system": {},
+        "effect_system": {},
     },
-    Environment.PRINT: {},
+    Environment.WEB: {
+        "light_system": {
+            "server_address": "wss://houseofsucky.xyz/illuminatrix_simulation_server",
+            # "ack_style": "",  # not sure about the scope of this yet
+        },
+        "sound_system": {},
+        "input_system": {},
+        "effect_system": {},
+    },
+    Environment.PRINT: {
+        "light_system": {},
+        "sound_system": {},
+        "input_system": {},
+        "effect_system": {},
+    },
 }

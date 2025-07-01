@@ -1,6 +1,7 @@
 import argparse
 import logging
 import time
+from copy import copy
 
 from bases.BaseSystem import BaseSystem
 from components.TowerController import TowerController
@@ -9,8 +10,9 @@ from constants.constants import (
     Environment,
     TowerEnum,
 )
-from systems.SystemFactory import SystemFactory
-from utils.utils import find_game_classes
+from managers.ManagerSingletonFactory import ManagerSingletonFactory
+from systems.SystemSingletonFactory import SystemSingletonFactory
+from utils import find_game_classes
 
 logger = logging.getLogger(__name__)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)15s() ] %(message)s"
@@ -39,28 +41,28 @@ def main():
 
     options = parser.parse_args()
 
-    generic_context = {
-        "num_towers": options.num_towers,
-    }
-
     environment_context = ENVIRONMENT_CONTEXT[options.environment]
-    context = {**generic_context, **environment_context}
+    context = copy(environment_context)
     if options.environment in {Environment.WEB}:
         if not options.id:
             parser.error("running a web simulation requires --id")
-        context["client_id"] = options.id
+        context["light_system"]["client_id"] = options.id
 
-    systems: list[BaseSystem] = []
 
     # Instantiate the systems
-    system_factory = SystemFactory(options.environment, context)
-    systems = [
-        system_factory.get_light_system(),
-        system_factory.get_sound_system(),
-        system_factory.get_input_system(),
+    system = SystemSingletonFactory(options.environment, context)
+    active_systems: list[BaseSystem] = [
+        system.get_light_system(),
+        system.get_sound_system(),
+        system.get_input_system(),
     ]
 
-    tower_controller = TowerController(system_factory)
+    manager = ManagerSingletonFactory(system)
+    active_managers: list[BaseSystem] = [
+        manager.get_effect_manager(),
+    ]
+
+    tower_controller = TowerController(system, manager)
     # TODO: this might pop, black will be better for production
     tower_controller.set_color((1.0, 1.0, 1.0))
 
@@ -77,8 +79,11 @@ def main():
     #     print("-->", name)
 
     # Start the systems
-    for system in systems:
-        system.startup()
+    for systems in active_systems:
+        systems.startup()
+
+    for manager in active_managers:
+        manager.startup()
 
     # Enter the game loop
     try:
@@ -86,15 +91,21 @@ def main():
             shutdown_request = False
 
             curr_time = time.time()
-            delta_ms = curr_time - prev_time
+            delta_secs = curr_time - prev_time
             prev_time = curr_time
 
-            shutdown_request = game.update(delta_ms)
+            shutdown_request = game.update(delta_secs)
 
-            for system in systems:
-                system.update(delta_ms)
+            for manager in active_managers:
+                manager.update(delta_secs)
 
-            for system in systems:
+            for system in active_systems:
+                system.update(delta_secs)
+
+            for manager in active_managers:
+                manager.render()
+
+            for system in active_systems:
                 system.render()
 
             if shutdown_request:
@@ -111,8 +122,11 @@ def main():
     finally:
         logger.info("Shutting down gracefully")
         time.sleep(0.1)
-        for system in systems:
-            logger.info("    Shutting down: %s", system)
+        for manager in active_managers:
+            logger.info("    Shutting down manager: %s", manager)
+            manager.shutdown()
+        for system in active_systems:
+            logger.info("    Shutting down system: %s", system)
             system.shutdown()
         time.sleep(0.1)
 

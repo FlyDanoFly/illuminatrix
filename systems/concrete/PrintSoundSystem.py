@@ -1,19 +1,22 @@
-from bases.SoundSystem import SoundSystem
-from constants.constants import SystemIdentifier
+from bases.SoundSystem import Sound, SoundSystem
+from constants.constants import TowerEnum
+
+
+class PrintSound(Sound):
+    pass
 
 
 class PrintSoundSystem(SoundSystem):
-    def setup(self, num_towers: int, **_):
-        print(f"PrintSoundSystem: Setting up {num_towers} towers")
-        super().setup(num_towers)
+    def setup(self, **_):
+        print("PrintSoundSystem: Setting up towers")
 
-    def play(self, tower_id: SystemIdentifier, sound: str) -> None:
-        print(f"PrintSoundSystem: Playing {sound} on tower {tower_id}")
-        return super().play(tower_id, sound)
+    def play(self, sound: str, tower_enums: list[TowerEnum] | None = None, volume: float = 1.0, num_loops: int = 0) -> Sound:
+        print(f"PrintSoundSystem: Playing {sound} on tower {tower_enums} for {num_loops} times")
+        return super().play(sound, tower_enums, volume, num_loops)
 
-    def update(self, delta_ms: float) -> None:
-        print(f"PrintSoundSystem: Updating the sound, {delta_ms=} json:")
-        return super().update(delta_ms)
+    def update(self, delta_secs: float) -> None:
+        print(f"PrintSoundSystem: Updating the sound, {delta_secs=} json:")
+        return super().update(delta_secs)
 
     def render(self) -> None:
         print("PrintSoundSystem: Rendering the sound")

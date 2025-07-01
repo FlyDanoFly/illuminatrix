@@ -1,11 +1,12 @@
-from BaseGame import BaseGame
+from bases import BaseGame, ShouldStop
 
 
 class PrintGame(BaseGame):
+    def __init__(self, *_) -> None:
+        print("__init__ called")
+
     def first_frame_update(self) -> None:
         print("PrintGame: first_frame_update() called")
-        return super().first_frame_update()
 
-    def update(self, delta_ms: float) -> bool:
-        print(f"PrintGame: update({delta_ms}) called")
-        return super().update(delta_ms)
+    def update(self, delta_secs: float) -> ShouldStop:
+        print(f"PrintGame: update({delta_secs}) called")

@@ -24,6 +24,7 @@ dependencies = [
 package-mode = false
 
 [tool.poetry.group.dev.dependencies]
+pydot = "^4.0.1"
 
 [tool.ruff]
 lint.extend-select = ["B", "I"]

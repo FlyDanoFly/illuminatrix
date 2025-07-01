@@ -1,8 +1,8 @@
 import logging
 
-from BaseGame import BaseStatemachineGame, ShouldStop
 from statemachine import State
 
+from bases import BaseStatemachineGame, ShouldStop
 from components.TowerController import TowerController
 from constants.colors import DULL_RAINBOW, RAINBOW
 
@@ -28,7 +28,7 @@ class DanoWhackAMoleGame(BaseStatemachineGame):
         super().__init__()
 
         self._towers = tower_controller
-        self._towers.load_sound_bank("sound_banks/lucy_whack_a_mole_1/")
+        self._towers.load_sound_bank("sound_banks/dano_whack_a_mole_1/")
 
         self._available_towers = set(tower_controller)
 
@@ -50,9 +50,9 @@ class DanoWhackAMoleGame(BaseStatemachineGame):
         self._elapsed_time_secs = 0.0
         logger.info("Welcome to Dano Whack-A-Mole! Press any tower to start.")
 
-    def do_introduction(self, delta_ms) -> ShouldStop:
+    def do_introduction(self, delta_secs) -> ShouldStop:
         """Handle the introduction state."""
-        self._elapsed_time_secs += delta_ms
+        self._elapsed_time_secs += delta_secs
         if self._elapsed_time_secs < self._time_between_moles_popping_up_sec:
             return
 
@@ -88,12 +88,12 @@ class DanoWhackAMoleGame(BaseStatemachineGame):
         tower_enum = self._available_towers.pop()
         tower = self._towers[tower_enum]
         tower.set_color(self._tower_color_high[tower_enum])
-        tower.play_sound("boom")
+        tower.play_sound("squeal1")
         logger.info(f"Mole popped at {tower_enum.name}!")
 
-    def do_playing(self, delta_ms) -> ShouldStop:
+    def do_playing(self, delta_secs) -> ShouldStop:
         """Handle the playing state."""
-        self._elapsed_time_secs += delta_ms
+        self._elapsed_time_secs += delta_secs
 
         for tower_enum, tower in self._towers.items():
             if tower.is_switch_transition_down():
@@ -113,14 +113,14 @@ class DanoWhackAMoleGame(BaseStatemachineGame):
     def on_enter_lost(self) -> None:
         """Handle the lost state."""
         logger.info("You lost! Game over.")
-        self._towers.play_sound("siren", num_loops=1)
+        self._towers.play_sound("long_siren")
         for tower in self._towers.values():
             tower.set_color((1.0, 0.0, 0.0))
         self._elapsed_time_secs = 0.0
 
-    def do_lost(self, delta_ms: float) -> ShouldStop:
+    def do_lost(self, delta_secs: float) -> ShouldStop:
         """Handle the lost state."""
-        self._elapsed_time_secs += delta_ms
+        self._elapsed_time_secs += delta_secs
         red = max(0.0, 1.0 - (self._elapsed_time_secs / (MOLES_FAIL_FADE_SEC)))
         self._towers.set_color((red, 0.0, 0.0))
         return (
