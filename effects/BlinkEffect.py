@@ -1,13 +1,13 @@
 from copy import copy
 
-from statemachine import State, StateMachine
+from statemachine import State
 
-from bases.BaseEffect import BaseEffect
-from constants.constants import ColorType, TowerEnum
+from bases.BaseStateMachineEffect import BaseStateMachineEffect
+from constants.constants import ColorType, ShouldStop, TowerEnum
 from systems.SystemSingletonFactory import SystemSingletonFactory
 
 
-class BlinkEffect(BaseEffect, StateMachine):
+class BlinkEffect(BaseStateMachineEffect):
     start = State("high", initial=True)
     high = State("high")
     low = State("low")
@@ -72,19 +72,21 @@ class BlinkEffect(BaseEffect, StateMachine):
     def on_exit_low(self) -> None:
         self._num_loops -= 1
 
-    def update(self, delta_secs: float) -> bool:
+    def update(self, delta_secs: float) -> ShouldStop:
         """
         Returns
             bool - True if effect is still active
         """
+        super().update(delta_secs)
+
         self._elapsed_time += delta_secs
         if self._elapsed_time < self._time_to_change:
-            return True
+            return False
 
         if self._num_loops == 0:
-            return False
+            return True
 
         self._elapsed_time -= self._time_to_change
         self.cycle()
-        return True
+        return False
 

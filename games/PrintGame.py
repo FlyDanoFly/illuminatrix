@@ -1,4 +1,5 @@
-from bases import BaseGame, ShouldStop
+from bases import BaseGame
+from constants.constants import ShouldStop
 
 
 class PrintGame(BaseGame):

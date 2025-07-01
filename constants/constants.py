@@ -6,7 +6,11 @@ class IlluminatrixError(Exception):
     pass
 
 
+# Color type is RGB or HSV agnostic
 type ColorType = tuple[float, float, float]
+
+# Type alias to clarify game update loop return type
+type ShouldStop = bool | None
 
 
 class TowerEnum(Enum):

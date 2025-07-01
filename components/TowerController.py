@@ -79,14 +79,14 @@ class TowerController:
         """Load a sound bank for the sound system."""
         self._sound_system.load_sound_bank(sound_bank)
 
-    def play_sound(self, sound, num_loops=0):
+    def play_sound(self, sound, volume: float = 1.0, num_loops: int = 0) -> None:
         # TODO: change to a log
         print(f"Playing sound: {sound}")
-        self._sound_system.play(sound, num_loops=num_loops)
+        self._sound_system.play(sound, volume=volume, num_loops=num_loops)
 
-    def fade_out(self, fade_time: float = 0.5):
+    def fade_out(self, fade_secs: float = 0.25):
         """Fade out all sounds."""
-        self._sound_system.stop_all(fade_time)
+        self._sound_system.stop_all(fade_secs)
 
     def are_any_sounds_playing(self) -> bool:
         return self._sound_system.are_any_sounds_playing()

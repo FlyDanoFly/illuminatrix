@@ -1,7 +1,7 @@
-from .BaseGame import BaseGame, BaseStatemachineGame, ShouldStop
+from .BaseGame import BaseGame
+from .BaseStateMachineGame import BaseStateMachineGame
 
 __all__ = [
     "BaseGame",
-    "BaseStatemachineGame",
-    "ShouldStop",
+    "BaseStateMachineGame",
 ]

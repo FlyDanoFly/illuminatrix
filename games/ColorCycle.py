@@ -23,7 +23,6 @@ class ColorCycle(BaseGame):
         self.update(0.0)
 
     def update(self, delta_secs: float) -> bool | None:
-        # print("ColorCycle.update()", delta_secs)
         self.start_hue = (self.start_hue + self.hertz * delta_secs) % 1.0
         hue = self.start_hue
         for _, tower in self._towers.items():

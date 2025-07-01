@@ -30,8 +30,9 @@ class Blink(BaseGame):
         """Returns: True if program should terminate, falsy to continue"""
         results = []
         for effect in self._effects:
-            is_playing = effect.update(delta_secs)
-            results.append(is_playing)
+            is_playing = effect.is_playing()
+            if is_playing:
+                results.append(is_playing)
         if not any(results):
             return True
         return False

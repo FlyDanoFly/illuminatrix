@@ -2,9 +2,10 @@ import logging
 
 from statemachine import State
 
-from bases import BaseStatemachineGame, ShouldStop
+from bases import BaseStateMachineGame
 from components.TowerController import TowerController
 from constants.colors import DULL_RAINBOW, RAINBOW
+from constants.constants import ShouldStop
 
 logger = logging.getLogger(__name__)
 
@@ -13,19 +14,21 @@ MOLES_NUM_INTRODUCTION_FLASHES = 3  # This should be odd
 MOLES_FAIL_FADE_SEC = 2.5
 
 
-class DanoWhackAMoleGame(BaseStatemachineGame):
+class DanoWhackAMole(BaseStateMachineGame):
     # Game states
-    introduction = State('Introduction', initial=True)
+    start = State("Start", initial=True)
+    introduction = State('Introduction')
     playing = State('Playing')
     lost = State('Lost', final=True)
 
     # Game state transitions
+    begin = start.to(introduction)
     start_game = introduction.to(playing)
     add_mole = playing.to(playing) | playing.to(lost)  # This would be a loop to keep adding moles
     lost_game = playing.to(lost)
 
     def __init__(self, tower_controller: TowerController) -> None:
-        super().__init__()
+        super().__init__(tower_controller)
 
         self._towers = tower_controller
         self._towers.load_sound_bank("sound_banks/dano_whack_a_mole_1/")
@@ -42,6 +45,7 @@ class DanoWhackAMoleGame(BaseStatemachineGame):
         """Override this to set up a first frame before updating"""
         for tower_enum, tower in self._towers.items():
             tower.set_color(self._tower_color_low[tower_enum])
+        self.begin()
 
     def on_enter_introduction(self) -> None:
         """Handle the introduction state."""

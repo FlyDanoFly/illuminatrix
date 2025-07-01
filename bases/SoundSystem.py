@@ -34,7 +34,7 @@ class SoundSystem(BaseSystem):
         pass
 
     @abstractmethod
-    def stop_all(self):
+    def stop_all(self, fade_secs: float = 0.25):
         pass
 
     @abstractmethod

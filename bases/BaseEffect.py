@@ -1,10 +1,13 @@
+from abc import ABC, abstractmethod
+
 from bases.InputSystem import InputSystem
 from bases.LightSystem import LightSystem
 from bases.SoundSystem import SoundSystem
+from constants.constants import ShouldStop
 from systems.SystemSingletonFactory import SystemSingletonFactory
 
 
-class BaseEffect:
+class BaseEffect(ABC):
     """
     Base class for re-usable effects.
 
@@ -20,12 +23,14 @@ class BaseEffect:
         self._sound_system: SoundSystem = system.get_sound_system()
         self._input_system: InputSystem = system.get_input_system()
 
-    def update(self, delta_secs: float) -> bool:
-        """Returns True if still playing"""
-        raise NotImplementedError("Subclasses should implement this method")
+    @abstractmethod
+    def update(self, delta_secs: float) -> ShouldStop:
+        """Returns True if not playing"""
 
+    @abstractmethod
     def is_playing(self) -> bool:
-        raise NotImplementedError("Subclasses should implement this method")
+        pass
 
+    @abstractmethod
     def is_done(self) -> bool:
-        raise NotImplementedError("Subclasses should implement this method")
+        pass
