@@ -9,6 +9,8 @@ from constants.constants import ShouldStop
 
 logger = logging.getLogger(__name__)
 
+MASTER_VOLUME = 1.0
+
 MOLES_TIME_BETWEEN_POPS_SEC = 1.0
 MOLES_NUM_INTRODUCTION_FLASHES = 3  # This should be odd
 MOLES_FAIL_FADE_SEC = 2.5
@@ -92,7 +94,7 @@ class DanoWhackAMole(BaseStateMachineGame):
         tower_enum = self._available_towers.pop()
         tower = self._towers[tower_enum]
         tower.set_color(self._tower_color_high[tower_enum])
-        tower.play_sound("squeal1")
+        tower.play_sound("squeal1", volume=MASTER_VOLUME)
         logger.info(f"Mole popped at {tower_enum.name}!")
 
     def do_playing(self, delta_secs) -> ShouldStop:
@@ -117,7 +119,7 @@ class DanoWhackAMole(BaseStateMachineGame):
     def on_enter_lost(self) -> None:
         """Handle the lost state."""
         logger.info("You lost! Game over.")
-        self._towers.play_sound("long_siren")
+        self._towers.play_sound("long_siren", volume=MASTER_VOLUME)
         for tower in self._towers.values():
             tower.set_color((1.0, 0.0, 0.0))
         self._elapsed_time_secs = 0.0

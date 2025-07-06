@@ -377,8 +377,8 @@ class JackSoundSystem(SoundSystem):
         self.mixer.play(snd, play_on_tower_enums)
         return snd
 
-    def stop_all(self, fade_time: float = 0.5):
-        self.mixer.stop_all(fade_time)
+    def stop_all(self, fade_secs: float = 0.25):
+        self.mixer.stop_all(fade_secs)
 
     def are_any_sounds_playing(self) -> bool:
         """Check if any sounds are currently playing."""

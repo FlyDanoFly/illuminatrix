@@ -79,6 +79,9 @@ class BlinkEffect(BaseStateMachineEffect):
         """
         super().update(delta_secs)
 
+        if self.current_state == self.done:
+            return True
+
         self._elapsed_time += delta_secs
         if self._elapsed_time < self._time_to_change:
             return False
