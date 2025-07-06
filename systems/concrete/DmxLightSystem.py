@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 class DmxLightSystem(LightSystem):
-    def update(self, delta_ms: float):
+    def update(self, delta_secs: float):
         logger.debug("DMX update")
 
     def render(self):

@@ -20,7 +20,7 @@ import numpy
 import soundfile
 
 from bases.SoundSystem import Sound, SoundSystem
-from constants.constants import SystemIdentifier, tower_to_system_identifier
+from constants.constants import TowerEnum
 
 logger = logging.getLogger(__name__)
 
@@ -182,8 +182,8 @@ class JackSound(Sound):
             return False
         return self.position >= len(self.data)
 
-    def start_fade_out(self, duration_sec: float, samplerate: int) -> None:
-        total_frames = int(duration_sec * samplerate)
+    def start_fade_out(self, duration_sec: float) -> None:
+        total_frames = int(duration_sec * self.samplerate)
         self.fade_out_curve = numpy.linspace(self.volume, 0.0, total_frames, dtype=numpy.float32)
         self.fade_out_index = 0
         self.fade_out_active = True
@@ -194,10 +194,10 @@ class JackSound(Sound):
         self.fade_out_comelete = True
         self.position = len(self.data)
 
-    def mix_into(self, output_buffers: list[numpy.ndarray], channel_map: list[int]) -> None:
+    def mix_into(self, output_buffers: list[numpy.ndarray], channel_map: list[TowerEnum]) -> None:
         frames = len(output_buffers[0])
         position = self.position
-        for i, target_channel in enumerate(channel_map):
+        for target_channel in [x.value - 1 for x in channel_map]:
             if target_channel >= len(output_buffers):
                 continue
             buf = output_buffers[target_channel]
@@ -236,7 +236,8 @@ class JackMixer:
         # If the server is already running, use this instead
         # self.client: jack.Client = jack.Client(name, no_start_server=True, servername="jacko_mixer")
         self.outports: list[jack.OwnPort] = []
-        self.active_sounds: list[tuple[Sound, list[int]]] = []
+        # self.active_sounds: list[tuple[JackSound, list[TowerEnum]]] = []
+        self.active_sounds: list[tuple[Sound, list[TowerEnum]]] = []
         self.lock: threading.Lock = threading.Lock()
         self.state: MixerState = MixerState.INIT
         self.shutdown_called: bool = False
@@ -299,15 +300,15 @@ class JackMixer:
         logger.info("Mixer shut down cleanly.")
         time.sleep(0.5)  # Give one last pause to let the terminal flush all text
 
-    def play(self, sound: Sound, channel_map: list[int] | int | None = None):
+    def play(self, sound: Sound, channel_map: list[TowerEnum] | TowerEnum | None = None):
         """Play a sound on the mixer.
 
         Args:
             sound (Sound): The sound to play.
-            channel_map (list[int]): A list of channel indices to play the sound on. Defaults to all channels.
+            channel_map (list[TowerEnum]): A list of channel indices to play the sound on. Defaults to all channels.
         """
         if channel_map is None or self.force_play_on_all_channels:
-            channel_map = list(range(len(self.outports)))
+            channel_map = list(TowerEnum) # list(range(len(self.outports)))
         if not isinstance(channel_map, list):
             channel_map = [channel_map]
         if self.state != MixerState.STARTED:
@@ -318,7 +319,7 @@ class JackMixer:
     def stop_all(self, fade_duration=0.5):
         with self.lock:
             for sound, _ in self.active_sounds:
-                sound.start_fade_out(fade_duration, self.client.samplerate)
+                sound.start_fade_out(fade_duration)
 
     def is_anything_playing(self):
         return bool(self.active_sounds)
@@ -342,7 +343,7 @@ class JackSoundSystem(SoundSystem):
             time.sleep(0.05)
         self.mixer.shutdown()
 
-    def update(self, delta_ms: float) -> None:
+    def update(self, delta_secs: float) -> None:
         """Update the JACK mixer state."""
         # This method is not implemented in this example, as the mixer processes audio in its own thread.
         # If needed, you could implement periodic updates or checks here.
@@ -363,18 +364,21 @@ class JackSoundSystem(SoundSystem):
     def play(
             self,
             sound: str,
-            system_ids: list[SystemIdentifier ] | None = None,
+            tower_enums: list[TowerEnum] | None = None,
             volume: float = 1.0,
             num_loops: int = 0) -> Sound:
         """Play a sound from the sound bank."""
         if sound not in self.sound_bank:
             raise ValueError(f"Sound {sound} not found in sound bank")
-        ids = system_ids or list(tower_to_system_identifier.values())
+        play_on_tower_enums: list[TowerEnum] = tower_enums or list(TowerEnum)
         # ids = [1]
         sound_data = self.sound_bank[sound]
         snd = sound_data.create_sound(volume=volume, num_loops=num_loops)
-        self.mixer.play(snd, ids)
+        self.mixer.play(snd, play_on_tower_enums)
         return snd
+
+    def stop_all(self, fade_secs: float = 0.25):
+        self.mixer.stop_all(fade_secs)
 
     def are_any_sounds_playing(self) -> bool:
         """Check if any sounds are currently playing."""
@@ -388,7 +392,7 @@ def main():
     mixer.startup()
 
     sound_bank = load_sound_bank("sound_banks/lucy_whack_a_mole_1")
-    snd1 = sound_bank["boom"].create_sound(volume=0.1, num_loops=10)  # Create a sound with volume and number of loops
+    snd1: Sound|None = sound_bank["boom"].create_sound(volume=0.1, num_loops=10)  # Create a sound with volume and number of loops
     snd2 = sound_bank["boom"].create_sound(num_loops=-1)  # Loop forever
 
     # filename = "LRMonof32.wav"  # Default
@@ -398,9 +402,9 @@ def main():
     # snd2 = Sound(filename, num_loops=-1)  # Loop forever
 
     stop_first_sound_time = 5.0 + time.time()
-    mixer.play(snd1, [0])       # Play to channel 0
+    mixer.play(snd1, [TowerEnum.Tower_1])       # Play to channel 0
     time.sleep(1.0)
-    mixer.play(snd2, [1])    # Play stereo sound to channels 2 and 3
+    mixer.play(snd2, [TowerEnum.Tower_2])    # Play stereo sound to channels 2 and 3
 
     def shutdown_handler(*_) -> None:
         # handler(signal_number: int, frame: types.FrameType|None)
@@ -431,7 +435,7 @@ def main():
                 logger.info("Stopping first sound")
                 logger.info("Stopping first sound")
                 logger.info("Stopping first sound")
-                snd1.start_fade_out(0.1, snd1.samplerate)
+                snd1.start_fade_out(0.1)
                 # snd1.stop()
                 snd1 = None
             time.sleep(0.5)

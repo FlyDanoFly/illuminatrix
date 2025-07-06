@@ -1,13 +1,14 @@
 import logging
 from typing import Generator, Iterator
 
+from bases.BaseEffect import BaseEffect
 from constants.constants import (
     ColorType,
     LightPos,
     TowerEnum,
-    tower_to_system_identifier,
 )
-from systems.SystemFactory import SystemFactory
+from managers.ManagerSingletonFactory import ManagerSingletonFactory
+from systems.SystemSingletonFactory import SystemSingletonFactory
 
 from .Tower import Tower
 
@@ -15,25 +16,23 @@ logger = logging.getLogger(__name__)
 
 
 class TowerController:
-    def __init__(self, system_factory: SystemFactory, one_indexed: bool = True):
-        # TODO: generate the towers in here rather than having them passed, pass the systems instead
+    def __init__(self, system: SystemSingletonFactory, manager: ManagerSingletonFactory, one_indexed: bool = True):
         """Init the controller for the towers.
 
         Args:
             towers - a list of the towers in Illuminatrix
             one_indexed - if True, using `lookup()` will be 1-indexed (1-8), otherwise it will be 0-indexed (0-7)
         """
-        self._light_system = system_factory.get_light_system()
-        self._sound_system = system_factory.get_sound_system()
-        self._input_system = system_factory.get_input_system()
+        self._light_system = system.get_light_system()
+        self._sound_system = system.get_sound_system()
+        self._input_system = system.get_input_system()
+        self._effects = manager.get_effect_manager()
         self._towers: dict[TowerEnum, Tower]
         self._towers = {
             tower_enum: Tower(
                 tower_enum,
-                tower_to_system_identifier[tower_enum],
-                self._light_system,
-                self._sound_system,
-                self._input_system,
+                system,
+                manager,
             )
             for tower_enum in TowerEnum
         }
@@ -80,17 +79,20 @@ class TowerController:
         """Load a sound bank for the sound system."""
         self._sound_system.load_sound_bank(sound_bank)
 
-    def play_sound(self, sound, num_loops=0):
+    def play_sound(self, sound, volume: float = 1.0, num_loops: int = 0) -> None:
         # TODO: change to a log
         print(f"Playing sound: {sound}")
-        self._sound_system.play(sound, num_loops=num_loops)
+        self._sound_system.play(sound, volume=volume, num_loops=num_loops)
 
-    def fade_out(self, fade_time: float = 0.5):
+    def fade_out(self, fade_secs: float = 0.25):
         """Fade out all sounds."""
-        self._sound_system.stop_all(fade_time)
+        self._sound_system.stop_all(fade_secs)
 
     def are_any_sounds_playing(self) -> bool:
         return self._sound_system.are_any_sounds_playing()
 
     def any_switch_pressed(self) -> bool:
         return any(tower.is_switch_pressed() for tower in self._towers.values())
+
+    def start_effect(self, effect: BaseEffect):
+        self._effects.start_effect(effect)

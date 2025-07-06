@@ -3,7 +3,7 @@ import time
 
 from statemachine import State, StateMachine
 
-from games import BaseGame
+from bases import BaseGame
 
 
 class BaseStateMachineGame(StateMachine, BaseGame):
@@ -13,7 +13,7 @@ class BaseStateMachineGame(StateMachine, BaseGame):
         """Override this to set up a first frame before updating"""
         pass
 
-    def update(self, delta_ms: float) -> bool | None:
+    def update(self, delta_secs: float) -> bool | None:
         """Returns: True if program should terminate, falsy to continue"""
         self.do_state()
         return True
@@ -23,6 +23,7 @@ class BaseStateMachineGame(StateMachine, BaseGame):
             do_state()
 
 
+# TODO: move this into games
 class SimonGame(StateMachine):
     waiting: State = State('Waiting', initial=True)
     showing_sequence: State = State('Showing Sequence')

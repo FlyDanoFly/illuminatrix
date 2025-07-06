@@ -1,14 +1,14 @@
 
-from bases.SoundSystem import SoundSystem
-from constants.constants import SystemIdentifier
+from bases.SoundSystem import Sound, SoundSystem
+from constants.constants import TowerEnum
 
 
 class NullSoundSystem(SoundSystem):
-    def play(self, tower_id: SystemIdentifier, sound: str):
-        return super().play(tower_id, sound)
+    def play(self, sound: str, tower_enums: list[TowerEnum] | None = None, volume: float = 1.0, num_loops: int = 0) -> Sound:
+        return super().play(sound, tower_enums)
 
-    def update(self, delta_ms: float):
-        return super().update(delta_ms)
+    def update(self, delta_secs: float):
+        return super().update(delta_secs)
 
     def render(self):
         return super().render()

@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 '''
 From:
 https://stackoverflow.com/a/22085679/3077006
@@ -19,19 +18,23 @@ GNU General Public License for more details.
 
 '''
 
-import os
-from typing import Self
-
+# Original
 # Windows
-if os.name == 'nt':
-    import msvcrt
-
-# Posix (Linux, OS X)
-else:
-    import atexit
-    import sys
-    import termios
-    from select import select
+# if os.name == 'nt':
+#     import msvcrt
+#
+# # Posix (Linux, OS X)
+# else:
+#     import atexit
+#     import sys
+#     import termios
+#     from select import select
+# Simplified
+import atexit
+import sys
+import termios
+from select import select
+from typing import Self
 
 
 class KBHit:
@@ -45,27 +48,27 @@ class KBHit:
         return self.startup()
 
     def startup(self) -> Self:
-        if os.name == 'nt':
-            pass
+        # if os.name == 'nt':
+        #     pass
+        #
+        # else:
 
-        else:
+        # Save the terminal settings
+        self.fd = sys.stdin.fileno()
+        self.new_term = termios.tcgetattr(self.fd)
+        self.old_term = termios.tcgetattr(self.fd)
 
-            # Save the terminal settings
-            self.fd = sys.stdin.fileno()
-            self.new_term = termios.tcgetattr(self.fd)
-            self.old_term = termios.tcgetattr(self.fd)
+        # New terminal setting unbuffered
+        self.new_term[3] = (self.new_term[3] & ~termios.ICANON & ~termios.ECHO)
+        termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.new_term)
 
-            # New terminal setting unbuffered
-            self.new_term[3] = (self.new_term[3] & ~termios.ICANON & ~termios.ECHO)
-            termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.new_term)
-
-            # Support normal-terminal reset at exit
-            atexit.register(self.set_normal_term)
+        # Support normal-terminal reset at exit
+        atexit.register(self.set_normal_term)
 
         return self
 
 
-    def __exit__(self, type, value, traceback) -> None:
+    def __exit__(self, *_) -> None:
         self.shutdown()
 
     def shutdown(self) -> None:
@@ -76,11 +79,11 @@ class KBHit:
         ''' Resets to normal terminal.  On Windows this is a no-op.
         '''
 
-        if os.name == 'nt':
-            pass
-
-        else:
-            termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.old_term)
+        # if os.name == 'nt':
+        #     pass
+        #
+        # else:
+        termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.old_term)
 
 
     def getch(self) -> str:
@@ -88,11 +91,11 @@ class KBHit:
             Should not be called in the same program as getarrow().
         '''
 
-        if os.name == 'nt':
-            return msvcrt.getch().decode('utf-8')
-
-        else:
-            return sys.stdin.read(1)
+        # if os.name == 'nt':
+        #     return msvcrt.getch().decode('utf-8')
+        #
+        # else:
+        return sys.stdin.read(1)
 
 
     def getarrow(self):
@@ -104,14 +107,14 @@ class KBHit:
         Should not be called in the same program as getch().
         '''
 
-        if os.name == 'nt':
-            msvcrt.getch() # skip 0xE0
-            c = msvcrt.getch()
-            vals = [72, 77, 80, 75]
-
-        else:
-            c = sys.stdin.read(3)[2]
-            vals = [65, 67, 66, 68]
+        # if os.name == 'nt':
+        #     msvcrt.getch() # skip 0xE0
+        #     c = msvcrt.getch()
+        #     vals = [72, 77, 80, 75]
+        #
+        # else:
+        c = sys.stdin.read(3)[2]
+        vals = [65, 67, 66, 68]
 
         return vals.index(ord(c.encode('utf-8')))
 
@@ -119,13 +122,13 @@ class KBHit:
     def kbhit(self, timeout:float = 0) -> bool:
         ''' Returns True if keyboard character was hit, False otherwise.
         '''
-        if os.name == 'nt':
-            return msvcrt.kbhit()
-
-        else:
-            dr,dw,de = select([sys.stdin], [], [], timeout)
-            # print(dr, dw, de)
-            return dr != []
+        # if os.name == 'nt':
+        #     return msvcrt.kbhit()
+        #
+        # else:
+        dr, *_ = select([sys.stdin], [], [], timeout)
+        # print(dr, dw, de)
+        return dr != []
 
 
 # Test    

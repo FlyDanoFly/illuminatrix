@@ -1,19 +1,18 @@
 from bases.LightSystem import LightSystem
-from constants.constants import ColorType, LightPos, SystemIdentifier
+from constants.constants import ColorType, LightPos, TowerEnum
 
 
 class PrintLightSystem(LightSystem):
-    def setup(self, num_towers: int):
-        print(f"PrintLightSystem: Setting up {num_towers} towers")
-        super().setup(num_towers)
+    def setup(self):
+        print("PrintLightSystem: Setting up towers")
 
-    def set(self, system_id: SystemIdentifier, color: ColorType, light: LightPos=LightPos.All) -> None:
-        print(f"PrintLightSystem: Setting tower {system_id} at pos {light} to {color}")
-        return super().set(system_id, color, light)
+    def set(self, tower_enum: TowerEnum, color: ColorType, light_pos: LightPos = LightPos.All) -> None:
+        print(f"PrintLightSystem: Setting tower {tower_enum} at pos {light_pos} to {color}")
+        return super().set(tower_enum, color, light_pos)
 
-    def update(self, delta_ms: float) -> None:
+    def update(self, delta_secs: float) -> None:
         print("PrintLightSystem: Updating the lights, json:")
-        return super().update(delta_ms)
+        return super().update(delta_secs)
 
     def render(self):
         print("PrintLightSystem: Rendering the lights")

@@ -1,35 +1,31 @@
 from bases.InputSystem import InputSystem
 from bases.LightSystem import LightSystem
-from bases.SoundSystem import SoundSystem
-from constants.constants import ColorType, LightPos, SystemIdentifier, TowerEnum
+from bases.SoundSystem import Sound, SoundSystem
+from constants.constants import ColorType, LightPos, TowerEnum
+from managers.EffectManager import EffectManager
+from managers.ManagerSingletonFactory import ManagerSingletonFactory
+from systems.SystemSingletonFactory import SystemSingletonFactory
 
 
 class Tower:
-    def __init__(
-            self,
-            tower_enum: TowerEnum,
-            system_identifier: SystemIdentifier,
-            light_system: LightSystem,
-            sound_system: SoundSystem,
-            input_system: InputSystem,
-    ):
-        self._tower = tower_enum
-        self._system_identifier = system_identifier
-        self._light_system = light_system
-        self._sound_system = sound_system
-        self._input_system = input_system
+    def __init__(self, tower_enum: TowerEnum, system: SystemSingletonFactory, manager: ManagerSingletonFactory):
+        self._tower_enum = tower_enum
+        self._light_system: LightSystem = system.get_light_system()
+        self._sound_system: SoundSystem = system.get_sound_system()
+        self._input_system: InputSystem = system.get_input_system()
+        self._effects: EffectManager = manager.get_effect_manager()
 
     def set_color(self, color: ColorType, light: LightPos = LightPos.All):
-        self._light_system.set(self._system_identifier, color, light)
+        self._light_system.set(self._tower_enum, color, light)
 
-    def play_sound(self, sound, volume: float = 1.0):
-        self._sound_system.play(sound, self._system_identifier)
+    def play_sound(self, sound, volume: float = 1.0) -> Sound:
+        return self._sound_system.play(sound, [self._tower_enum], volume)
 
     def is_switch_pressed(self) -> bool:
-        return self._input_system.get_switch_state(self._system_identifier)
+        return self._input_system.get_switch_state(self._tower_enum)
 
     def is_switch_transition_down(self) -> bool:
-        return self._input_system.get_switch_transition_down(self._system_identifier)
+        return self._input_system.get_switch_transition_down(self._tower_enum)
 
     def is_switch_transition_up(self) -> bool:
-        return self._input_system.get_switch_transition_up(self._system_identifier)
+        return self._input_system.get_switch_transition_up(self._tower_enum)

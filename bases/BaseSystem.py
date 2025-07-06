@@ -11,7 +11,7 @@ class BaseSystem(ABC):
         pass
 
     @abstractmethod
-    def update(self, delta_ms: float) -> None:
+    def update(self, delta_secs: float) -> None:
         pass
 
     @abstractmethod

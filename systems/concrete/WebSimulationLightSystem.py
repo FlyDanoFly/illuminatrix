@@ -10,7 +10,7 @@ from urllib.parse import urlparse, urlunparse
 from websockets.sync.client import connect
 
 from bases.LightSystem import LightSystem
-from constants.constants import ColorType, IlluminatrixError, LightPos, SystemIdentifier
+from constants.constants import ColorType, IlluminatrixError, LightPos, TowerEnum
 
 
 class IlluminatrixClientError(IlluminatrixError):
@@ -38,7 +38,7 @@ class ACK(Enum):
     ON_UPDATE = 2
 
 
-class WebsocketSimulation(LightSystem):
+class WebSimulationLightSystem(LightSystem):
     DEFAULT_ACK = ACK.ON_UPDATE
     DEFAULT_PATH = "ws2"
     DEFAULT_PREFIX = "illuminatrix_simulation_server"
@@ -47,16 +47,13 @@ class WebsocketSimulation(LightSystem):
             self,
             server_address: str,
             client_id:str,
-            num_towers: int,
             ack: ACK=DEFAULT_ACK):
         self.server_address = server_address
         self.client_id = client_id
         self.ack = ack
         self.websocket = None
-        self._tower_colors: dict[SystemIdentifier, ColorType] = {}
-        self._prev_tower_colors: dict[SystemIdentifier, ColorType|None] = {
-            system_id: None for system_id in range(num_towers)
-        }
+        self._tower_colors: dict[TowerEnum, ColorType] = {}
+        self._prev_tower_colors: dict[TowerEnum, ColorType|None] = {t: None for t in TowerEnum}
 
     def startup(self) -> None:
         self.connect()
@@ -89,7 +86,7 @@ class WebsocketSimulation(LightSystem):
             self.websocket.close()
         self.websocket = None
 
-    def set(self, system_id: SystemIdentifier, color: ColorType, light_pos: LightPos = LightPos.All):
+    def set(self, tower_enum: TowerEnum, color: ColorType, light_pos: LightPos = LightPos.All) -> None:
         """
         Set one or more towers the same color
 
@@ -106,9 +103,9 @@ class WebsocketSimulation(LightSystem):
             0.0 <= green <= 1.0 and
             0.0 <= blue <= 1.0):
             raise IlluminatrixClientError()
-        self._tower_colors[system_id] = (red, green, blue)
+        self._tower_colors[tower_enum] = (red, green, blue)
 
-    def update(self, delta_ms: float) -> None:
+    def update(self, delta_secs: float) -> None:
         pass
 
     def render(self) -> None:
@@ -131,7 +128,7 @@ class WebsocketSimulation(LightSystem):
                 0.0 <= color[1] <= 1.0 and
                 0.0 <= color[2] <= 1.0):
                 raise IlluminatrixClientError("Color out of bounds: %s", color)
-            tower_dict[tower_id] = color
+            tower_dict[tower_id.value - 1] = color
 
         # Update the previous state
         self._prev_tower_colors.update(self._tower_colors)
