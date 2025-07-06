@@ -124,10 +124,6 @@ class StoryTime(BaseStateMachineGame):
         for step in beat[chosen_tower]:
             yield step
 
-    def iter_story_step_1(self, beat, chosen_tower):
-        for step in self.story[beat][chosen_tower]:
-            yield step
-
     def first_frame_update(self) -> None:
         """Override this to set up a first frame before updating"""
         for tower_enum, tower in self._towers.items():
@@ -136,7 +132,7 @@ class StoryTime(BaseStateMachineGame):
 
     def on_enter_introduction(self) -> None:
         """Handle the introduction state."""
-        logger.info("Switching to the introduction state.")
+        logger.debug("Switching to the introduction state.")
         self._effects = [
             BlinkEffect(
                 [tower_enum],
@@ -159,19 +155,14 @@ class StoryTime(BaseStateMachineGame):
  
     def on_exit_introduction(self) -> None:
         """Handle the playing state."""
-        logger.info("Switching to the playing state.")
-        self.beat = 0
-        self.step = 0
-        self.my_beater = self.iter_story_beat()
-        self.beat = -1
+        logger.debug("Switching to the playing state.")
+        self.beat_iter = self.iter_story_beat()
         # TODO: make loader (or a util) assert that there is always at least 1 beat
 
     def on_enter_waiting_for_input(self) -> None:
-        self.step = 0
         self.selected_tower = None
         self.sound_playing = None
-        self.my_beat = self.my_beater.__next__()
-        self.beat += 1
+        self.my_beat = self.beat_iter.__next__()
         for tower_enum, tower in self._towers.items():
             tower.set_color(RAINBOW[tower_enum.value - 1])
 
@@ -183,27 +174,22 @@ class StoryTime(BaseStateMachineGame):
                 self.start_speaking()
 
     def on_exit_waiting_for_input(self) -> None:
-        self.step = 0
-        self.my_stepper = self.iter_story_step(self.my_beat, self.selected_tower)
-        # self.my_stepper = self.iter_story_step(self.beat, self.selected_tower)
+        self.step_iter = self.iter_story_step(self.my_beat, self.selected_tower)
         # TODO: make loader assert that every beat and selected tower has at least 1 step, better yet make a validation tool
-        self.my_step = self.my_stepper.__next__()
+        self.step = self.step_iter.__next__()
 
     def on_enter_speaking(self) -> None:
         for tower_enum, tower in self._towers.items():
             tower.set_color(DULL_RAINBOW[tower_enum.value - 1])
-        self.step += 1
         self.flash_tower = None
         self.sound_playing = None
         assert self.selected_tower is not None, "Tower selection not present"
-        # to_flash, *_ = self.story[self.beat][self.selected_tower][self.step]
-        to_flash, sound_key, text = self.my_step
-        # sound_key = f"tower_{to_flash.value}__{self.beat}__{self.step}"
+        to_flash, sound_key, text = self.step
         self.sound_playing = self._towers[to_flash].play_sound(sound_key, volume=MASTER_VOLUME)
-        self.effect = BlinkEffect([TowerEnum(to_flash)], BLACK, WHITE, 0.05, 0.05, num_loops=0)
+        self.effect = BlinkEffect([to_flash], DULL_RAINBOW[to_flash.value-1], RAINBOW[to_flash.value-1], 0.05, 0.05, num_loops=0)
         self._towers.start_effect(self.effect)
         self.effect.begin()
-        print("Speaking:", text)
+        logger.info("Speaking:", text)
 
     def do_speaking(self, delta_secs: float) -> ShouldStop:
         if self.sound_playing and self.sound_playing.is_done():
@@ -211,7 +197,7 @@ class StoryTime(BaseStateMachineGame):
             self.effect.finish()
 
     def on_enter_pause_between_speaking(self) -> None:
-        print("on_enter_pause_between_speaking)")
+        logger.debug("on_enter_pause_between_speaking")
         self._elapsed_time_secs = 0.0
         self.pause_time_secs = 0.75
 
@@ -220,7 +206,7 @@ class StoryTime(BaseStateMachineGame):
         if self._elapsed_time_secs < self.pause_time_secs:
             return
         try:
-            self.my_step = self.my_stepper.__next__()
+            self.step = self.step_iter.__next__()
             self.start_speaking()
         except StopIteration:
             self.get_input()
