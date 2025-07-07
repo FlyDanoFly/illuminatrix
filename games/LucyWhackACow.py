@@ -9,11 +9,12 @@ from constants.constants import TowerEnum
 logger = logging.getLogger(__name__)
 
 
-class LucyWhackAMole(BaseGame):
+class LucyWhackACow(BaseGame):
     def __init__(self, tower_controller: TowerController):
         super().__init__()
         self._towers = tower_controller
         self._towers.load_sound_bank("sound_banks/lucy_whack_a_mole_1/")
+
         self.elapsed_time = 0.0
         self.time_between_moles_popping_up = 1
         self.towers = list(range(len(TowerEnum)))
