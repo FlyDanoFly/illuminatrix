@@ -35,7 +35,7 @@ class LucyWhackACow(BaseGame):
             if self._towers.are_any_sounds_playing():
                 return False
             return True
-        if self._towers.any_switch_pressed():
+        if self._towers.is_any_switch_pressed():
             for tower_enum, tower in self._towers.items():
                 if tower.is_switch_pressed():
                     if tower_enum.value - 1 not in self.towers_that_are_off:

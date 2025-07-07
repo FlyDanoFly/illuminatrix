@@ -102,7 +102,7 @@ class DanoWhackAMole(BaseStateMachineGame):
         self._elapsed_time_secs += delta_secs
 
         for tower_enum, tower in self._towers.items():
-            if tower.is_switch_transition_down():
+            if tower.did_switch_transition_down():
                 if tower_enum not in self._available_towers:
                     tower.set_color(self._tower_color_low[tower_enum])
                     self._available_towers.add(tower_enum)
