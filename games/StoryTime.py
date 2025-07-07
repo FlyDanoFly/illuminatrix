@@ -6,7 +6,7 @@ from statemachine import State
 
 from bases import BaseStateMachineGame
 from components.TowerController import TowerController
-from constants.colors import BLACK, DULL_RAINBOW, RAINBOW, WHITE
+from constants.colors import DULL_RAINBOW, RAINBOW
 from constants.constants import ShouldStop, TowerEnum
 from effects.BlinkEffect import BlinkEffect
 
@@ -17,6 +17,8 @@ MASTER_VOLUME = 1.0
 INTRO_TIME_BETWEEN_FLASHES_SEC = 0.5
 INTRO_NUM_FLASHES = 7  # This should be odd
 STORY_BIT = namedtuple("STORY_BIT", ("flash_tower_enum", "sound_key", "story_text"))
+PAUSE_TIME_BETWEEN_SPEAKERS_SEC = 0.5
+DEBUG_SKIP_BEATS = 16
 
 
 class StoryTime(BaseStateMachineGame):
@@ -34,7 +36,7 @@ class StoryTime(BaseStateMachineGame):
     start_speaking = waiting_for_input.to(speaking) | pause_between_speaking.to(speaking)
     start_pause = speaking.to(pause_between_speaking)
     get_input = pause_between_speaking.to(waiting_for_input)
-    story_done = pause_between_speaking.to(done)
+    story_done = waiting_for_input.to(done)
 
     def __init__(self, tower_controller: TowerController) -> None:
         super().__init__()
@@ -130,6 +132,9 @@ class StoryTime(BaseStateMachineGame):
             tower.set_color(self._tower_color_low[tower_enum])
         self.begin()
 
+    # ----------------------------------------------------------------------
+    # State: introduction
+
     def on_enter_introduction(self) -> None:
         """Handle the introduction state."""
         logger.debug("Switching to the introduction state.")
@@ -157,12 +162,23 @@ class StoryTime(BaseStateMachineGame):
         """Handle the playing state."""
         logger.debug("Switching to the playing state.")
         self.beat_iter = self.iter_story_beat()
+        if DEBUG_SKIP_BEATS:
+            for _ in range(DEBUG_SKIP_BEATS):
+                self.beat_iter.__next__()
         # TODO: make loader (or a util) assert that there is always at least 1 beat
+
+    # ----------------------------------------------------------------------
+    # State: waiting_for_input
 
     def on_enter_waiting_for_input(self) -> None:
         self.selected_tower = None
         self.sound_playing = None
-        self.my_beat = self.beat_iter.__next__()
+        try:
+            self.my_beat = self.beat_iter.__next__()
+        except StopIteration:
+            # No more beats, done!
+            self.story_done()
+
         for tower_enum, tower in self._towers.items():
             tower.set_color(RAINBOW[tower_enum.value - 1])
 
@@ -176,7 +192,14 @@ class StoryTime(BaseStateMachineGame):
     def on_exit_waiting_for_input(self) -> None:
         self.step_iter = self.iter_story_step(self.my_beat, self.selected_tower)
         # TODO: make loader assert that every beat and selected tower has at least 1 step, better yet make a validation tool
-        self.step = self.step_iter.__next__()
+        try:
+            self.step = self.step_iter.__next__()
+        except StopIteration:
+            # TODO: Programatically ensure that we are transitioning to "done", we probably are and can pass
+            pass
+
+    # ----------------------------------------------------------------------
+    # State: speaking
 
     def on_enter_speaking(self) -> None:
         for tower_enum, tower in self._towers.items():
@@ -189,17 +212,20 @@ class StoryTime(BaseStateMachineGame):
         self.effect = BlinkEffect([to_flash], DULL_RAINBOW[to_flash.value-1], RAINBOW[to_flash.value-1], 0.05, 0.05, num_loops=0)
         self._towers.start_effect(self.effect)
         self.effect.begin()
-        logger.info("Speaking:", text)
+        logger.info("Speaking: %s", text)
 
     def do_speaking(self, delta_secs: float) -> ShouldStop:
         if self.sound_playing and self.sound_playing.is_done():
             self.start_pause()
             self.effect.finish()
 
+    # ----------------------------------------------------------------------
+    # State: pause_between_speaking
+
     def on_enter_pause_between_speaking(self) -> None:
         logger.debug("on_enter_pause_between_speaking")
         self._elapsed_time_secs = 0.0
-        self.pause_time_secs = 0.75
+        self.pause_time_secs = PAUSE_TIME_BETWEEN_SPEAKERS_SEC
 
     def do_pause_between_speaking(self, delta_secs: float) -> ShouldStop:
         self._elapsed_time_secs += delta_secs
@@ -210,3 +236,9 @@ class StoryTime(BaseStateMachineGame):
             self.start_speaking()
         except StopIteration:
             self.get_input()
+
+    # ----------------------------------------------------------------------
+    # State: done
+    def do_done(self, delta_secs: float) -> ShouldStop:
+        return True
+

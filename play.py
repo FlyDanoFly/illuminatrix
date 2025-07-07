@@ -22,7 +22,7 @@ logging.basicConfig(format=FORMAT, level=logging.WARNING)
 def main():
     """Run an Illuminatrix game from the command line."""
 
-    games = {c.__name__: c for c in find_game_classes("./games")}
+    available_games = {c.__name__: c for c in find_game_classes("./games")}
 
     parser = argparse.ArgumentParser(
         prog="play",
@@ -37,7 +37,7 @@ def main():
 
     parser.add_argument("--framerate", type=int, default=30, help="force maximum framerate, use 0 to run at maximum possible")
 
-    parser.add_argument("game", choices=sorted(games.keys()), help="game to run")
+    parser.add_argument("games", nargs="+", choices=sorted(available_games.keys()), help="game to run")
 
     options = parser.parse_args()
 
@@ -66,7 +66,7 @@ def main():
     # TODO: this might pop, black will be better for production
     tower_controller.set_color((1.0, 1.0, 1.0))
 
-    game_class = games[options.game]
+    game_class = available_games[options.games[0]]
     game = game_class(tower_controller)
 
     prev_time = time.time()
@@ -115,10 +115,10 @@ def main():
                 i = 0
                 while (time.time() - prev_time) < (1.0 / options.framerate):
                     i += 1
-                    logger.debug("sleeping num times this frame: %d", i)
                     time.sleep(0.001)
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt, quitting")
+        print("KeyboardInterrupt, quitting")
     finally:
         logger.info("Shutting down gracefully")
         time.sleep(0.1)
