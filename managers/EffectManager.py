@@ -13,12 +13,12 @@ class EffectManager(BaseSystem):
 
     This is a higher level system than the fundamental systems, e.g. light, sound, input. Instead of being independent it sits on top of them, calling them but never the other direction.
     """
-    def __init__(self, system: SystemSingletonFactory) -> None:
+    def __init__(self, systems: SystemSingletonFactory) -> None:
         self._active_effects = []
-        self._system = system
-        self._light_system: LightSystem = system.get_light_system()
-        self._sound_system: SoundSystem = system.get_sound_system()
-        self._input_system: InputSystem = system.get_input_system()
+        self._systems = systems
+        self._light_system: LightSystem = systems.get_light_system()
+        self._sound_system: SoundSystem = systems.get_sound_system()
+        self._input_system: InputSystem = systems.get_input_system()
 
     def startup(self) -> None:
         pass
@@ -30,7 +30,7 @@ class EffectManager(BaseSystem):
         pass
 
     def start_effect(self, effect: BaseEffect) -> None:
-        effect.attach_systems(self._system)
+        effect.attach_systems(self._systems)
         self._active_effects.append(effect)
 
     def update(self, delta_secs: float) -> None:
@@ -41,3 +41,6 @@ class EffectManager(BaseSystem):
             if effect.is_playing():
                 still_playing.append(effect)
         self._active_effects = still_playing
+
+    def stop_all(self) -> None:
+        self._active_effects = []

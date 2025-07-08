@@ -4,6 +4,7 @@ import time
 from copy import copy
 
 from bases.BaseSystem import BaseSystem
+from components.GameController import GameController
 from components.TowerController import TowerController
 from constants.constants import (
     ENVIRONMENT_CONTEXT,
@@ -37,7 +38,7 @@ def main():
 
     parser.add_argument("--framerate", type=int, default=30, help="force maximum framerate, use 0 to run at maximum possible")
 
-    parser.add_argument("games", nargs="+", choices=sorted(available_games.keys()), help="game to run")
+    parser.add_argument("games", nargs="*", choices=sorted(available_games.keys()), help="game to run")
 
     options = parser.parse_args()
 
@@ -50,27 +51,23 @@ def main():
 
 
     # Instantiate the systems
-    system = SystemSingletonFactory(options.environment, context)
+    systems = SystemSingletonFactory(options.environment, context)
     active_systems: list[BaseSystem] = [
-        system.get_light_system(),
-        system.get_sound_system(),
-        system.get_input_system(),
+        systems.get_light_system(),
+        systems.get_sound_system(),
+        systems.get_input_system(),
     ]
 
-    manager = ManagerSingletonFactory(system)
+    managers: ManagerSingletonFactory = ManagerSingletonFactory(systems)
     active_managers: list[BaseSystem] = [
-        manager.get_effect_manager(),
+        managers.get_effect_manager(),
     ]
 
-    tower_controller = TowerController(system, manager)
+    tower_controller = TowerController(systems, managers)
     # TODO: this might pop, black will be better for production
     tower_controller.set_color((1.0, 1.0, 1.0))
 
-    game_class = available_games[options.games[0]]
-    game = game_class(tower_controller)
-
     prev_time = time.time()
-    game.first_frame_update()
 
     # Uncomment to see all the loggers, the long term intent is to learn
     # how to set individual logging levels on different parts of the code
@@ -79,11 +76,23 @@ def main():
     #     print("-->", name)
 
     # Start the systems
-    for systems in active_systems:
-        systems.startup()
+    for system in active_systems:
+        system.startup()
 
     for manager in active_managers:
         manager.startup()
+
+    # All games are available unless a subset is specificed on the command line
+    games_to_play = available_games.values()
+    if options.games:
+        games_to_play = {v for v in available_games.values() if v.__name__ in options.games}
+
+    game_controller = GameController(
+        systems,
+        managers,
+        tower_controller,
+        list(games_to_play),
+    )
 
     # Enter the game loop
     try:
@@ -94,7 +103,7 @@ def main():
             delta_secs = curr_time - prev_time
             prev_time = curr_time
 
-            shutdown_request = game.update(delta_secs)
+            shutdown_request = game_controller.update(delta_secs)
 
             for manager in active_managers:
                 manager.update(delta_secs)
@@ -120,6 +129,7 @@ def main():
         logger.info("KeyboardInterrupt, quitting")
         print("KeyboardInterrupt, quitting")
     finally:
+        print("Shutting down gracefully")
         logger.info("Shutting down gracefully")
         time.sleep(0.1)
         for manager in active_managers:

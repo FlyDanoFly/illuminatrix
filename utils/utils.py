@@ -1,18 +1,18 @@
 from math import fmod
-from typing import Any, Sequence
+from typing import Generator, Iterable
 
 from constants.constants import ColorType
 
 
-def cycle(cycle_source: Sequence[Any]):
-    if len(cycle_source) < 2:
-        raise ValueError("Need at least two elements to cycle through")
-    idx = 0
-    while True:
-        yield cycle_source[idx]
-        idx += 1
-        if idx >= len(cycle_source):
-            idx = 0
+def cycle[T](cycle_source: Iterable[T], loops: int = -1) -> Generator[T]:
+    """Loop through the source n times, if n<=0 loop infinitiely"""
+    items = list(cycle_source)
+    if not items:
+        return
+    while loops != 0:
+        for item in items:
+            yield item
+        loops -= 1
 
 
 def is_normalized(f: float) -> bool:
