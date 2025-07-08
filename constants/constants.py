@@ -23,6 +23,13 @@ class TowerEnum(Enum):
     Tower_7 = auto()
 
 
+class ControllerSwitchEnum(Enum):
+    START = auto()
+    NEXT_GAME = auto()
+    RESET = auto()
+    # NEXT_VARIATION = auto()  # If we decide to do variations
+
+
 class LightPos(Flag):
     Tower_top = auto()
     Tower_bottom = auto()

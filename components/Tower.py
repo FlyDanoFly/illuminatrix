@@ -22,10 +22,10 @@ class Tower:
         return self._sound_system.play(sound, [self._tower_enum], volume)
 
     def is_switch_pressed(self) -> bool:
-        return self._input_system.get_switch_state(self._tower_enum)
+        return self._input_system.is_tower_switch_pressed(self._tower_enum)
 
-    def is_switch_transition_down(self) -> bool:
-        return self._input_system.get_switch_transition_down(self._tower_enum)
+    def did_switch_transition_down(self) -> bool:
+        return self._input_system.did_tower_switch_transition_down(self._tower_enum)
 
-    def is_switch_transition_up(self) -> bool:
-        return self._input_system.get_switch_transition_up(self._tower_enum)
+    def did_switch_transition_up(self) -> bool:
+        return self._input_system.did_tower_switch_transition_up(self._tower_enum)

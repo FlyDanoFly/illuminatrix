@@ -71,9 +71,23 @@ class TowerController:
         for tower_enum, tower in self._towers.items():
             yield tower_enum, tower
 
+    def items_int_keys(self) -> Generator[tuple[int, Tower]]:
+        """Yield pairs (tower_idex, Tower), if one-indexed tower_index starts at 1"""
+        for tower_enum, tower in self._towers.items():
+            tower_num = tower_enum.value
+            if not self._one_indexed:
+                tower_num -= 1
+            yield tower_num, tower
+
+    # ----------------------------------------------------------------------
+    # Colors
+
     def set_color(self, color: ColorType, light: LightPos = LightPos.All):
         for tower in self._towers.values():
             tower.set_color(color, light)
+
+    # ----------------------------------------------------------------------
+    # Sounds
 
     def load_sound_bank(self, sound_bank: str):
         """Load a sound bank for the sound system."""
@@ -91,8 +105,20 @@ class TowerController:
     def are_any_sounds_playing(self) -> bool:
         return self._sound_system.are_any_sounds_playing()
 
-    def any_switch_pressed(self) -> bool:
+    # ----------------------------------------------------------------------
+    # Switches
+
+    def is_any_switch_pressed(self) -> bool:
         return any(tower.is_switch_pressed() for tower in self._towers.values())
+
+    def did_switch_transition_down(self) -> bool:
+        return any(tower.did_switch_transition_down() for tower in self._towers.values())
+
+    def did_switch_transition_up(self) -> bool:
+        return any(tower.did_switch_transition_up() for tower in self._towers.values())
+
+    # ----------------------------------------------------------------------
+    # Effects
 
     def start_effect(self, effect: BaseEffect):
         self._effects.start_effect(effect)

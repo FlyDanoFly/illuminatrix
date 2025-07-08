@@ -185,7 +185,7 @@ class StoryTime(BaseStateMachineGame):
     def do_waiting_for_input(self, delta_secs: float) -> ShouldStop:
         self._elapsed_time_secs += delta_secs
         for tower_enum in self.towers_in_use:
-            if self._towers[tower_enum].is_switch_transition_down():
+            if self._towers[tower_enum].did_switch_transition_down():
                 self.selected_tower = tower_enum
                 self.start_speaking()
 

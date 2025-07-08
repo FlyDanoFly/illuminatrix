@@ -19,7 +19,7 @@ class PopCycle(BaseGame):
     def update(self, delta_secs: float) -> bool:
         """Returns: True if program should terminate, falsy to continue"""
         # to test inputs, let's make it white if a key is pressed
-        override = self._towers.any_switch_pressed()
+        override = self._towers.is_any_switch_pressed()
         if override:
             self._towers.set_color(WHITE)
 
