@@ -369,7 +369,8 @@ class JackSoundSystem(SoundSystem):
             num_loops: int = 0) -> Sound:
         """Play a sound from the sound bank."""
         if sound not in self.sound_bank:
-            raise ValueError(f"Sound {sound} not found in sound bank")
+            logger.warning(f"Sound {sound} not found in sound bank")
+            return
         play_on_tower_enums: list[TowerEnum] = tower_enums or list(TowerEnum)
         # ids = [1]
         sound_data = self.sound_bank[sound]

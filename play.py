@@ -20,6 +20,15 @@ FORMAT = "[%(filename)s:%(lineno)s - %(funcName)15s() ] %(message)s"
 logging.basicConfig(format=FORMAT, level=logging.WARNING)
 
 
+GAMES_TO_SKIP_IN_PRODUCTION: set[str] = {
+    "PrintGame",
+    "DanoWhackAMole",
+    "Blink",
+    "PopCycle",
+    "ColorCycle",
+}
+
+
 def main():
     """Run an Illuminatrix game from the command line."""
 
@@ -38,9 +47,19 @@ def main():
 
     parser.add_argument("--framerate", type=int, default=30, help="force maximum framerate, use 0 to run at maximum possible")
 
+    parser.add_argument("--allgames", default=False, action="store_true", help="make all games available, not just production games")
+
     parser.add_argument("games", nargs="*", choices=sorted(available_games.keys()), help="game to run")
 
     options = parser.parse_args()
+
+    if not options.allgames:
+        print(available_games)
+        print("==")
+        for game_to_skip in GAMES_TO_SKIP_IN_PRODUCTION:
+            if game_to_skip in available_games:
+                del available_games[game_to_skip]
+        print(available_games)
 
     environment_context = ENVIRONMENT_CONTEXT[options.environment]
     context = copy(environment_context)

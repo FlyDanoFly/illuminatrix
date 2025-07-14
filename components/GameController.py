@@ -82,6 +82,9 @@ class GameController(StateMachineMixin, StateMachine):
         self._towers.set_color(WHITE)
         self._game_cycler = cycle(self._game_classes)
         self._selected_game = self._game_cycler.__next__()
+        print("YOY Currently selected game:", self._selected_game, self._selected_game.__name__)
+        self._towers.load_sound_bank("sound_banks/intro_and_instructions")
+        print("OnStartSelection")
 
     # ------------------------------------------------------------
     # State: await_input
@@ -89,6 +92,8 @@ class GameController(StateMachineMixin, StateMachine):
     def on_enter_await_input(self) -> None:
         self._selected_game = self._game_cycler.__next__()
         print("Currently selected game:", self._selected_game)
+        print("*"*80)
+        self._towers.play_sound(self._selected_game.__name__, volume=0.25)
 
     def do_await_input(self, delta_secs: float) -> ShouldStop:
         if self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.START):
