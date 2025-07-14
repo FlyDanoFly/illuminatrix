@@ -55,9 +55,16 @@ class DanoWhackAMole(BaseStateMachineGame):
         self._flashes_remaining = MOLES_NUM_INTRODUCTION_FLASHES
         self._elapsed_time_secs = 0.0
         logger.info("Welcome to Dano Whack-A-Mole! Press any tower to start.")
+        for tower_enum, tower in self._towers.items():
+            sound_key = f"simon_intro_c{tower_enum.value}"
+            tower.play_sound(sound_key)
+            print("*"*20, sound_key)
 
     def do_introduction(self, delta_secs) -> ShouldStop:
         """Handle the introduction state."""
+        if self._towers.are_any_sounds_playing():
+            return
+
         self._elapsed_time_secs += delta_secs
         if self._elapsed_time_secs < self._time_between_moles_popping_up_sec:
             return

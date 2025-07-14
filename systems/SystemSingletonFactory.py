@@ -3,27 +3,32 @@ from bases.InputSystem import InputSystem
 from bases.LightSystem import LightSystem
 from bases.SoundSystem import SoundSystem
 from constants.constants import Environment
+from systems.concrete.DmxLightSystem import DmxLightSystem
 from systems.concrete.JackSoundSystem import JackSoundSystem
 from systems.concrete.KeyboardInputSystem import KeyboardInputSystem
 from systems.concrete.PrintInputSystem import PrintInputSystem
 from systems.concrete.PrintLightSystem import PrintLightSystem
 from systems.concrete.PrintSoundSystem import PrintSoundSystem
+from systems.concrete.SwitchInputSystem import SwitchInputSystem
 from systems.concrete.WebSimulationLightSystem import WebSimulationLightSystem
 
 
 class SystemSingletonFactory:
     LIGHT_SYSTEM_MAP: dict[Environment, type[LightSystem]] = {
-        # Environment.EMBEDDED: DmxLightSystem,
+        Environment.EMBEDDED: DmxLightSystem,
         Environment.WEB: WebSimulationLightSystem,
         Environment.PRINT: PrintLightSystem,
     }
     SOUND_SYSTEM_MAP: dict[Environment, type[SoundSystem]] = {
         # Environment.EMBEDDED: PrintSoundSystem,
+        Environment.EMBEDDED: JackSoundSystem,
         Environment.WEB: JackSoundSystem,
         Environment.PRINT: PrintSoundSystem,
     }
     INPUT_SYSTEM_MAP: dict[Environment, type[InputSystem]] = {
         # Environment.EMBEDDED: PrintInputSystem,
+        # Environment.EMBEDDED: KeyboardInputSystem,
+        Environment.EMBEDDED: SwitchInputSystem,
         Environment.WEB: KeyboardInputSystem,
         Environment.PRINT: PrintInputSystem,
     }

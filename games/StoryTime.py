@@ -18,7 +18,7 @@ INTRO_TIME_BETWEEN_FLASHES_SEC = 0.5
 INTRO_NUM_FLASHES = 7  # This should be odd
 STORY_BIT = namedtuple("STORY_BIT", ("flash_tower_enum", "sound_key", "story_text"))
 PAUSE_TIME_BETWEEN_SPEAKERS_SEC = 0.5
-DEBUG_SKIP_BEATS = 16
+DEBUG_SKIP_BEATS = 0 # 16
 
 
 class StoryTime(BaseStateMachineGame):

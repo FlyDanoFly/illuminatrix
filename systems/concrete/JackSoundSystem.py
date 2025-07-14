@@ -348,7 +348,7 @@ class JackSoundSystem(SoundSystem):
         # This method is not implemented in this example, as the mixer processes audio in its own thread.
         # If needed, you could implement periodic updates or checks here.
         # Perhaps dealing with streaming data?
-        logger.debug("Audio cpu_load(): %s", self.mixer.client.cpu_load())
+        # print("Audio cpu_load(): %s", self.mixer.client.cpu_load())
 
     def render(self) -> None:
         """Render the current state of the JACK mixer."""
