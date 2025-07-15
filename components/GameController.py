@@ -1,3 +1,4 @@
+import time
 from typing import Sequence
 
 from statemachine import State, StateMachine
@@ -32,12 +33,14 @@ class GameController(StateMachineMixin, StateMachine):
     """
     initial_state = State("initial_state", initial=True)
     await_input = State("await_input")
+    instructions = State("instructions")
     playing_game = State("playing_game")
     cancel = State("cancel")
 
     start_selection = initial_state.to(await_input) | playing_game.to(await_input) | cancel.to(await_input)
     next_option = await_input.to(await_input)
-    start_game = initial_state.to(playing_game) | await_input.to(playing_game)
+    give_instructions = await_input.to(instructions)
+    start_game = initial_state.to(playing_game) | instructions.to(playing_game)
     cancel_game = playing_game.to(cancel)
 
     def __init__(
@@ -97,7 +100,8 @@ class GameController(StateMachineMixin, StateMachine):
 
     def do_await_input(self, delta_secs: float) -> ShouldStop:
         if self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.START):
-            self.start_game()
+            # self.start_game()
+            self.give_instructions()
         elif self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.NEXT_GAME):
             # TODO: feedback another option has been selected
             self.next_option()
@@ -105,13 +109,26 @@ class GameController(StateMachineMixin, StateMachine):
     # ------------------------------------------------------------
     # State: playing_game
 
+    def on_enter_instructions(self) -> None:
+        self._towers.play_sound(f"{self._selected_game.__name__}__instructions", volume=0.25)
+
+    def do_instructions(self, delta_ms: float) -> ShouldStop:
+        if self._towers.are_any_sounds_playing():
+            # Presume it is playing the instructions or finishing the game, skip
+            time.sleep(0.01)
+            return
+        else:
+            self.start_game()
+
     def on_enter_playing_game(self) -> None:
+        # This is the init function
         self._current_game = self._selected_game(self._towers)
         self._current_game.first_frame_update()
         print("Starting game:", self._current_game.__class__)
 
     def do_playing_game(self, delta_ms: float) -> ShouldStop:
         is_done = False
+
         if self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.RESET):
             is_done = True
         else:

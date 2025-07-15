@@ -21,7 +21,7 @@ PAUSE_TIME_BETWEEN_SPEAKERS_SEC = 0.5
 DEBUG_SKIP_BEATS = 0 # 16
 
 
-class StoryTime(BaseStateMachineGame):
+class StoryTimeHorror(BaseStateMachineGame):
     # Game states
     start = State("Start", initial=True)
     introduction = State("Introduction")
