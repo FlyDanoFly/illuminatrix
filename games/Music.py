@@ -29,7 +29,6 @@ class Music(BaseGame):
 
     def update(self, delta_secs: float) -> bool:
         logger.debug("LucyTest.update()", delta_secs)
-        print("LucyTest")
         self.elapsed_time += delta_secs
         if self.elapsed_time >= self.fade_time:
             self.elapsed_time -= self.fade_time
@@ -40,7 +39,7 @@ class Music(BaseGame):
                 self.towers[tower].set_color(tuple(self.rbg_for_each_tower[tower]))
         if self._towers.is_any_switch_pressed():
             for tower_enum, tower in self._towers.items():
-                if tower.is_switch_pressed():
+                if tower.did_switch_transition_down():
                     tower.set_color(RAINBOW[tower_enum.value - 1])
                     self.rbg_for_each_tower[tower_enum.value - 1] = list(RAINBOW[tower_enum.value - 1])
                     tower.play_sound("note-"+str(tower_enum.value))

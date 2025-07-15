@@ -85,7 +85,8 @@ class LucyMagic8Ball(BaseGame):
                 self.towers[self.newest_lit_tower].play_sound("tick")
                 if self.last_lit_tower == self.newest_lit_tower:
                     self.stage = "blinking"
-                    self.towers[self.final_tower].play_sound("gong")
+                    # self.towers[self.final_tower].play_sound("gong")
+                    self.towers[self.last_lit_tower].play_sound(f"answer_{self.final_tower+1}")
             return False
         if self.stage == "blinking":
             if self.light_elapsed_time >= self.current_blink_state_time:
