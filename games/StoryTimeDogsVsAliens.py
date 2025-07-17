@@ -21,7 +21,7 @@ PAUSE_TIME_BETWEEN_SPEAKERS_SEC = 0.5
 DEBUG_SKIP_BEATS = 0 # 16
 
 
-class StoryTimeHorror(BaseStateMachineGame):
+class StoryTimeDogsVsAliens(BaseStateMachineGame):
     # Game states
     start = State("Start", initial=True)
     introduction = State("Introduction")
@@ -41,10 +41,10 @@ class StoryTimeHorror(BaseStateMachineGame):
     def __init__(self, tower_controller: TowerController) -> None:
         super().__init__()
 
-        self.towers_in_use, self.story = self._read_file("sound_banks/story_time/gremoryland/Story mode_ Stories - GremoryLand (Sonya - in progress).csv")
+        self.towers_in_use, self.story = self._read_file("sound_banks/story_time/dogs_vs_aliens/Story mode_ Stories - Example_ Dog vs Aliens.csv")
 
         self._towers = tower_controller
-        self._towers.load_sound_bank("sound_banks/story_time/gremoryland")
+        self._towers.load_sound_bank("sound_banks/story_time/dogs_vs_aliens")
 
         self._tower_color_low = dict(zip(tower_controller, DULL_RAINBOW, strict=True))
         self._tower_color_high = dict(zip(tower_controller, RAINBOW, strict=True))
@@ -184,7 +184,6 @@ class StoryTimeHorror(BaseStateMachineGame):
                 tower.set_color(RAINBOW[tower_enum.value - 1])
             else:
                 tower.set_color(DULL_RAINBOW[tower_enum.value - 1])
-            # tower.set_color(RAINBOW[tower_enum.value - 1])
 
     def do_waiting_for_input(self, delta_secs: float) -> ShouldStop:
         self._elapsed_time_secs += delta_secs
