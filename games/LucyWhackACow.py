@@ -16,12 +16,14 @@ class LucyWhackACow(BaseGame):
         self._towers.load_sound_bank("sound_banks/lucy_whack_a_mole_1/")
 
         self.elapsed_time = 0.0
-        self.time_between_moles_popping_up = 1
+        self.time_between_moles_popping_up = 2.0
         self.towers = list(range(len(TowerEnum)))
         self.int_to_tower = {x: y for x, y in enumerate(TowerEnum)}
         self.towers_that_are_off = list(range(len(TowerEnum)))
         self.new_mole_number = 0
         self.failed = False
+        self.moles_whacked = 0
+        self.level = 0
 
     def first_frame_update(self) -> None:
         for idx, tower in enumerate(self._towers.values()):
@@ -39,19 +41,26 @@ class LucyWhackACow(BaseGame):
             for tower_enum, tower in self._towers.items():
                 if tower.is_switch_pressed():
                     if tower_enum.value - 1 not in self.towers_that_are_off:
-                        tower.set_color((1.0, 1.0, 1.0))
+                        tower.set_color(DULL_RAINBOW[tower_enum.value - 1])
                         self.towers_that_are_off.append(tower_enum.value - 1)
+                        self.moles_whacked += 1
+                        if self.moles_whacked == 20:
+                            self.moles_whacked = 0
+                            self.level += 1
+                            self.time_between_moles_popping_up *= 0.8
+                            self._towers.play_sound("level-up")
+                            print("Level up", "*"*40)
         if self.elapsed_time >= self.time_between_moles_popping_up:
             self.elapsed_time -= self.time_between_moles_popping_up
             self.new_mole_number = random.choice(self.towers_that_are_off)
             tower = self._towers[self.int_to_tower[self.new_mole_number]]
             tower.set_color(RAINBOW[self.new_mole_number])
-            tower.play_sound("boom")
+            tower.play_sound("moo")
             self.towers_that_are_off.remove(self.new_mole_number)
             if len(self.towers_that_are_off) == 0:
                 for tower in self._towers.values():
                     tower.set_color((1.0, 0.0, 0.0))
                 print("Wrong!")
                 self.failed = True
-                self._towers.play_sound("siren")
+                self._towers.play_sound("siren", num_loops=2)
         return False

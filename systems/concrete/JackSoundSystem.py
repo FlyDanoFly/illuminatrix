@@ -348,7 +348,7 @@ class JackSoundSystem(SoundSystem):
         # This method is not implemented in this example, as the mixer processes audio in its own thread.
         # If needed, you could implement periodic updates or checks here.
         # Perhaps dealing with streaming data?
-        logger.debug("Audio cpu_load(): %s", self.mixer.client.cpu_load())
+        # print("Audio cpu_load(): %s", self.mixer.client.cpu_load())
 
     def render(self) -> None:
         """Render the current state of the JACK mixer."""
@@ -369,7 +369,8 @@ class JackSoundSystem(SoundSystem):
             num_loops: int = 0) -> Sound:
         """Play a sound from the sound bank."""
         if sound not in self.sound_bank:
-            raise ValueError(f"Sound {sound} not found in sound bank")
+            logger.warning(f"Sound {sound} not found in sound bank")
+            return
         play_on_tower_enums: list[TowerEnum] = tower_enums or list(TowerEnum)
         # ids = [1]
         sound_data = self.sound_bank[sound]

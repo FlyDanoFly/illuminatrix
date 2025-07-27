@@ -12,8 +12,8 @@ class Blink(BaseGame):
                 [tower_enum],
                 low_color=DULL_RAINBOW[tower_enum.value - 1],
                 high_color=RAINBOW[tower_enum.value - 1],
-                low_time_sec=0.25,
-                high_time_sec=0.5,
+                low_time_sec=1.25,
+                high_time_sec=1.5,
                 num_loops=0,
             ) for tower_enum in tower_controller
         ]

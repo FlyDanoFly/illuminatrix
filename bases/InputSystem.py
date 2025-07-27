@@ -6,16 +6,17 @@ from constants.constants import ControllerSwitchEnum, TowerEnum
 
 class InputSystem(BaseSystem):
     @abstractmethod
-    def is_switch_pressed(self, switch: str) -> bool:
+    def is_switch_pressed(self, switch: TowerEnum | ControllerSwitchEnum) -> bool:
         pass
 
     @abstractmethod
-    def did_switch_transition_down(self, switch: str) -> bool:
+    def did_switch_transition_down(self, switch: TowerEnum | ControllerSwitchEnum) -> bool:
         pass
 
     @abstractmethod
-    def did_switch_transition_up(self, switch: str) -> bool:
+    def did_switch_transition_up(self, switch: TowerEnum | ControllerSwitchEnum) -> bool:
         pass
+
     @abstractmethod
     def is_tower_switch_pressed(self, tower_enum: TowerEnum) -> bool:
         pass
