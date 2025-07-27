@@ -85,9 +85,7 @@ class GameController(StateMachineMixin, StateMachine):
         self._towers.set_color(WHITE)
         self._game_cycler = cycle(self._game_classes)
         self._selected_game = self._game_cycler.__next__()
-        print("YOY Currently selected game:", self._selected_game, self._selected_game.__name__)
         self._towers.load_sound_bank("sound_banks/intro_and_instructions")
-        print("OnStartSelection")
 
     # ------------------------------------------------------------
     # State: await_input
@@ -95,19 +93,17 @@ class GameController(StateMachineMixin, StateMachine):
     def on_enter_await_input(self) -> None:
         self._selected_game = self._game_cycler.__next__()
         print("Currently selected game:", self._selected_game)
-        print("*"*80)
         self._towers.play_sound(self._selected_game.__name__, volume=0.25)
 
     def do_await_input(self, delta_secs: float) -> ShouldStop:
         if self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.START):
-            # self.start_game()
             self.give_instructions()
         elif self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.NEXT_GAME):
             # TODO: feedback another option has been selected
             self.next_option()
 
     # ------------------------------------------------------------
-    # State: playing_game
+    # State: instructions
 
     def on_enter_instructions(self) -> None:
         self._towers.play_sound(f"{self._selected_game.__name__}__instructions", volume=0.25)
@@ -120,8 +116,10 @@ class GameController(StateMachineMixin, StateMachine):
         else:
             self.start_game()
 
+    # ------------------------------------------------------------
+    # State: playing_game
+
     def on_enter_playing_game(self) -> None:
-        # This is the init function
         self._current_game = self._selected_game(self._towers)
         self._current_game.first_frame_update()
         print("Starting game:", self._current_game.__class__)
@@ -150,7 +148,3 @@ class GameController(StateMachineMixin, StateMachine):
         self._sounds.stop_all()
         self._effects.stop_all()
         self.start_selection()
-
-
-
-

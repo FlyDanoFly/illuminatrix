@@ -184,7 +184,6 @@ class StoryTimeHorror(BaseStateMachineGame):
                 tower.set_color(RAINBOW[tower_enum.value - 1])
             else:
                 tower.set_color(DULL_RAINBOW[tower_enum.value - 1])
-            # tower.set_color(RAINBOW[tower_enum.value - 1])
 
     def do_waiting_for_input(self, delta_secs: float) -> ShouldStop:
         self._elapsed_time_secs += delta_secs

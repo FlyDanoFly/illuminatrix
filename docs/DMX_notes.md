@@ -44,6 +44,3 @@ And then towers were in pairs, e.g.
 - Tower 1: `d01`, `d11`
 - Tower 2: `d21`, `d31`
 - etc
-
-## About to integrate this learning with my code, notes here
-

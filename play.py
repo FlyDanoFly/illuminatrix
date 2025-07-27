@@ -100,17 +100,13 @@ def main():
     for manager in active_managers:
         manager.startup()
 
-    print("sleep 2 to warmup")
+    print("Sleep 2 to warmup to wait for the serial system to init")
     time.sleep(2)
 
     # All games are available unless a subset is specificed on the command line
     games_to_play = available_games.values()
     if options.games:
         games_to_play = {v for v in available_games.values() if v.__name__ in options.games}
-    else:
-        print("*"*80)
-        print("Going into controller mode with all games available")
-        print("*"*80)
 
     game_controller = GameController(
         systems,
@@ -146,7 +142,6 @@ def main():
                 break
 
             if options.framerate:
-                # print("BREA")
                 i = 0
                 while (time.time() - prev_time) < (1.0 / options.framerate):
                     i += 1
