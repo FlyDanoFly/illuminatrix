@@ -17,3 +17,4 @@
 - [ ] Service that restarts on the pi
 - [ ] Fix all the sounds everywhere
 - [ ] Add streaming
+- [ ] Enhance story mode, either with class properties, or a proxy base class or only search for similar stuff
