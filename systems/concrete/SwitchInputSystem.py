@@ -41,8 +41,12 @@ def build_frame(rgb_data: list[int], control_leds: list[int]) -> bytes:
 
 class SwitchInputSystem(InputSystem):
     def __init__(self, **_):
-        self._prev_switch_state: dict[TowerEnum | ControllerSwitchEnum, bool] = {}
-        self._switch_state: dict[TowerEnum | ControllerSwitchEnum, bool] = {}
+        super().__init__(**_)
+        # self._prev_switch_state: dict[TowerEnum | ControllerSwitchEnum, bool] = {}
+        # self._switch_state: dict[TowerEnum | ControllerSwitchEnum, bool] = {}
+        # self._time_since_last_input = 0.0
+        # self._time_since_last_switch_input = 0.0
+        # self._time_since_last_tower_input = 0.0
 
     def startup(self) -> None:
         self.serial = serial.Serial("/dev/ttyACM0", 115200, timeout=0.1)
@@ -53,7 +57,6 @@ class SwitchInputSystem(InputSystem):
         return super().shutdown()
 
     def update(self, delta_secs: float) -> None: 
-        lines = getattr(self, 'lines', 0)
         self._prev_switch_state = self._switch_state
         self._switch_state = {}
         # TODO: dummy stomp pad data to get the switch states
@@ -63,49 +66,63 @@ class SwitchInputSystem(InputSystem):
         # print("Writing", frame)
         self.serial.write(frame)
         response = self.serial.read(2)
+        tower_switch_pressed = False
+        controller_switch_pressed = False
         if len(response) == 2:
             tower_switches = response[0]
             control_switches = response[1]
             for tower_enum, bitmask in TOWER_TO_BITMASK.items():
                 if tower_switches & bitmask:
                     self._switch_state[tower_enum] = True
+                    tower_switch_pressed = True
             for controller_enum, bitmask in SWITCH_TO_BITMASK.items():
                 if control_switches & bitmask:
                     self._switch_state[controller_enum] = True
-            lines += 1
+                    controller_switch_pressed = True
+
+        if tower_switch_pressed or controller_switch_pressed:
+            self._time_since_last_input = 0.0
+            if tower_switch_pressed:
+                self._time_since_last_tower_input = 0.0
+            else:
+                self._time_since_last_tower_input += delta_secs
+            if controller_switch_pressed:
+                self._time_since_last_switch_input = 0.0
+            else:
+                self._time_since_last_switch_input += delta_secs
 
     def render(self) -> None:
         return super().render()
 
-    def is_switch_pressed(self, switch: TowerEnum | ControllerSwitchEnum) -> bool:
-        return self._switch_state.get(switch, False)
-
-    def did_switch_transition_down(self, switch: TowerEnum | ControllerSwitchEnum) -> bool:
-        return (
-            not self._prev_switch_state.get(switch, False)
-            and self._switch_state.get(switch, False)
-        )
-
-    def did_switch_transition_up(self, switch: TowerEnum | ControllerSwitchEnum) -> bool:
-        return (
-            self._prev_switch_state.get(switch, False)
-            and not self._switch_state.get(switch, False)
-        )
-
-    def is_tower_switch_pressed(self, tower_enum: TowerEnum) -> bool:
-        return self.is_switch_pressed(tower_enum)
-
-    def did_tower_switch_transition_down(self, tower_enum: TowerEnum) -> bool:
-        return self.did_switch_transition_down(tower_enum)
-
-    def did_tower_switch_transition_up(self, tower_enum: TowerEnum) -> bool:
-        return self.did_switch_transition_up(tower_enum)
-
-    def is_controller_switch_pressed(self, controller_switch_enum: ControllerSwitchEnum) -> bool:
-        return self.is_switch_pressed(controller_switch_enum)
-
-    def did_controller_switch_transition_down(self, controller_switch_enum: ControllerSwitchEnum) -> bool:
-        return self.did_switch_transition_down(controller_switch_enum)
-
-    def did_controller_switch_transition_up(self, controller_switch_enum: ControllerSwitchEnum) -> bool:
-        return self.did_switch_transition_up(controller_switch_enum)
+    # def is_switch_pressed(self, switch: TowerEnum | ControllerSwitchEnum) -> bool:
+    #     return self._switch_state.get(switch, False)
+    #
+    # def did_switch_transition_down(self, switch: TowerEnum | ControllerSwitchEnum) -> bool:
+    #     return (
+    #         not self._prev_switch_state.get(switch, False)
+    #         and self._switch_state.get(switch, False)
+    #     )
+    #
+    # def did_switch_transition_up(self, switch: TowerEnum | ControllerSwitchEnum) -> bool:
+    #     return (
+    #         self._prev_switch_state.get(switch, False)
+    #         and not self._switch_state.get(switch, False)
+    #     )
+    #
+    # def is_tower_switch_pressed(self, tower_enum: TowerEnum) -> bool:
+    #     return self.is_switch_pressed(tower_enum)
+    #
+    # def did_tower_switch_transition_down(self, tower_enum: TowerEnum) -> bool:
+    #     return self.did_switch_transition_down(tower_enum)
+    #
+    # def did_tower_switch_transition_up(self, tower_enum: TowerEnum) -> bool:
+    #     return self.did_switch_transition_up(tower_enum)
+    #
+    # def is_controller_switch_pressed(self, controller_switch_enum: ControllerSwitchEnum) -> bool:
+    #     return self.is_switch_pressed(controller_switch_enum)
+    #
+    # def did_controller_switch_transition_down(self, controller_switch_enum: ControllerSwitchEnum) -> bool:
+    #     return self.did_switch_transition_down(controller_switch_enum)
+    #
+    # def did_controller_switch_transition_up(self, controller_switch_enum: ControllerSwitchEnum) -> bool:
+    #     return self.did_switch_transition_up(controller_switch_enum)
