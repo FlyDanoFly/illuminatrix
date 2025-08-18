@@ -1,3 +1,4 @@
+
 import csv
 import logging
 from collections import defaultdict, namedtuple
@@ -21,8 +22,13 @@ PAUSE_TIME_BETWEEN_SPEAKERS_SEC = 0.5
 DEBUG_SKIP_BEATS = 0 # 16
 
 
-class StoryTimeHorrorHIDEME(BaseStateMachineGame):
-    PROXY = True
+class StoryTimeBase(BaseStateMachineGame):
+    # TODO: Make the proxy class cleaner than this hack
+    PROXY: bool = True
+
+    # These should be overridden in the derived class
+    STORY_SPEC_CSV: str = ""
+    STORY_SOUND_BANK: str = ""
 
     # Game states
     start = State("Start", initial=True)
@@ -43,10 +49,12 @@ class StoryTimeHorrorHIDEME(BaseStateMachineGame):
     def __init__(self, tower_controller: TowerController) -> None:
         super().__init__()
 
-        self.towers_in_use, self.story = self._read_file("sound_banks/story_time/gremoryland/Story mode_ Stories - GremoryLand (Sonya - in progress).csv")
+        self.towers_in_use, self.story = self._read_file(self.STORY_SPEC_CSV)
+        # self.towers_in_use, self.story = self._read_file("sound_banks/story_time/gremoryland/Story mode_ Stories - GremoryLand (Sonya - in progress).csv")
 
         self._towers = tower_controller
-        self._towers.load_sound_bank("sound_banks/story_time/gremoryland")
+        self._towers.load_sound_bank(self.STORY_SOUND_BANK)
+        # self._towers.load_sound_bank("sound_banks/story_time/gremoryland")
 
         self._tower_color_low = dict(zip(tower_controller, DULL_RAINBOW, strict=True))
         self._tower_color_high = dict(zip(tower_controller, RAINBOW, strict=True))

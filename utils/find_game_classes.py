@@ -36,6 +36,7 @@ def find_game_classes(base_dir: str, base_class_module: str = "bases", base_clas
                 issubclass(cls, base_class)
                 and cls is not base_class
                 and cls.__module__ == module_name
+                and not getattr(cls, "PROXY", False)
             ):
                 classes.append(cls)
 
