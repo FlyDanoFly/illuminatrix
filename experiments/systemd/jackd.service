@@ -1,0 +1,25 @@
+# https://bbs.archlinux.org/viewtopic.php?id=165545
+[Unit]
+Description=JACK Audio Server
+After=sound.target
+Before=multi-user.target
+
+[Service]
+# Allow real-time scheduling and memory locking
+LimitRTPRIO=infinity
+LimitMEMLOCK=infinity
+
+User=dano
+# ExecStart=/usr/bin/jackd -R -P89 -dalsa -dhw:0 -r44100 -p128 -n3
+ExecStart=/usr/bin/jackd --realtime --realtime-priority 89 --name illuminatrix_jack_server_mixer -dalsa
+Environment="JACK_NO_AUDIO_RESERVATION=1"
+
+# Wait until JACK is fully ready before marking service as started
+ExecStartPost=/usr/bin/jack_wait -w --server illuminatrix_jack_server_mixer
+
+# Restart on crash
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

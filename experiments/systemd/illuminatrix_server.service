@@ -1,0 +1,28 @@
+# Stole a lot of these from pihole-FTL.service
+[Unit]
+Description=The Illuminatrix Simulation Web Server
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+# Limit (re)start loop to 10 within 1 minute
+StartLimitBurst=10
+StartLimitIntervalSec=60s
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=2s
+User=dano
+WorkingDirectory=/home/dano/Projects/illuminatrix_server
+ExecStart=/home/dano/.local/bin/poetry run uvicorn illuminatrix_server:app --reload
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Use graceful shutdown with a reasonable timeout
+TimeoutStopSec=10s
+
+# Make /usr, /boot, /etc and possibly some more folders read-only...
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

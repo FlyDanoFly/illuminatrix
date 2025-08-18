@@ -1,0 +1,68 @@
+# This is the jackd.service that I was fiddling with that turned out
+# to be more of a base for `illuminatrix.service`. I was playing with
+# some in `illuminatrix.lan:~/Projects/systemd/`` and got something
+# working, I'll copy them to experiments and check them in.
+#
+#
+## Stole a lot of these from pihole-FTL.service and wetdogwetdog.lan/illuminatrix_server.service
+
+[Unit]
+Description=The Illuminatrix - Actual
+; Wants=network-online.target
+After=multi-user.target
+
+# Limit (re)start loop to 10 within 1 minute
+StartLimitIntervalSec=0
+StartLimitBurst=6
+StartLimitIntervalSec=60s
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=5s
+User=dano
+WorkingDirectory=/home/dano/Projects/Illuminatrix/python/illuminatrix
+ExecStart=/home/dano/.local/bin/poetry run python play.py embedded
+; ExecStart=/home/dano/.local/bin/poetry run python play.py embedded
+ExecReload=/bin/kill -HUP $MAINPID
+
+Environment="PATH=/home/dano/.pyenv/versions/3.13.3/bin:$PATH"
+Environment=PYTHONUNBUFFERED=1
+
+User=dano
+
+Group=dano
+Group=adm
+Group=dialout
+Group=cdrom
+Group=sudo
+Group=audio
+Group=video
+Group=plugdev
+Group=games
+Group=users
+Group=input
+Group=render
+Group=netdev
+Group=olad
+Group=gpio
+Group=i2c
+Group=spi
+
+LimitRTPRIO=infinity
+LimitMEMLOCK=infinity
+
+# Use graceful shutdown with a reasonable timeout
+TimeoutStopSec=10s
+
+# Make /usr, /boot, /etc and possibly some more folders read-only...
+# no		do not limit file system for invoked processes - default	
+# yes/true	mount /usr and boot loader paths (/boot, /efi) read-only for invoked processes
+# full		mount /usr, /boot, /efi, /etc as read-only for invoked processes
+# strict	mount full file system read-only, except /dev, /proc, and /sys
+ProtectSystem=no
+# TODO: `full` might be better, test that the switches still work when set that way
+# ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
