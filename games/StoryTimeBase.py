@@ -254,4 +254,3 @@ class StoryTimeBase(BaseStateMachineGame):
     # State: done
     def do_done(self, delta_secs: float) -> ShouldStop:
         return True
-
