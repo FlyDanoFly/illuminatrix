@@ -16,6 +16,11 @@ from managers.ManagerSingletonFactory import ManagerSingletonFactory
 from systems.SystemSingletonFactory import SystemSingletonFactory
 from utils.utils import cycle
 
+# If no input is received in this time frame, the game is cancelled
+GAME_CONTROLLER_GAME_IDLE_TIMEOUT_SECS = 5 * 60
+# If no input is received in this time frame, go into ambient mode
+GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS = 2 * 60
+
 
 class GameController(StateMachineMixin, StateMachine):
     """
@@ -40,7 +45,7 @@ class GameController(StateMachineMixin, StateMachine):
     start_selection = initial_state.to(await_input) | playing_game.to(await_input) | cancel.to(await_input)
     next_option = await_input.to(await_input)
     give_instructions = await_input.to(instructions)
-    start_game = initial_state.to(playing_game) | instructions.to(playing_game)
+    start_game = initial_state.to(playing_game) | instructions.to(playing_game) | await_input.to(playing_game)
     cancel_game = playing_game.to(cancel)
 
     def __init__(
@@ -49,6 +54,7 @@ class GameController(StateMachineMixin, StateMachine):
         manager_singleton_factory: ManagerSingletonFactory,
         tower_controller: TowerController,
         game_classes: Sequence[type[BaseGame]],
+        ambient_class: type[BaseGame],
     ):
         """
         Args
@@ -69,6 +75,11 @@ class GameController(StateMachineMixin, StateMachine):
         self._game_classes: Sequence[type[BaseGame]] = game_classes
         self._game_cycler = cycle(self._game_classes)
         self._selected_game: type[BaseGame] = self._game_cycler.__next__()
+
+        self._ambient_class: type[BaseGame] = ambient_class
+
+        self._game_idle_secs: float = 0.0
+        self._controller_input_idle_secs: float = 0.0
 
         # Special case: if there is only one game passed in just use that, don't choose
         if len(game_classes) == 1:
@@ -94,8 +105,18 @@ class GameController(StateMachineMixin, StateMachine):
         self._selected_game = self._game_cycler.__next__()
         print("Currently selected game:", self._selected_game)
         self._towers.play_sound(self._selected_game.__name__, volume=0.25)
+        self._controller_input_idle_secs = 0.0
 
     def do_await_input(self, delta_secs: float) -> ShouldStop:
+        if self._towers.is_any_switch_pressed():
+            self._controller_input_idle_secs = 0.0
+        else:
+            self._controller_input_idle_secs += delta_secs
+            if self._controller_input_idle_secs > GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS:
+                self._selected_game = self._ambient_class
+                self.start_game()
+                return
+
         if self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.START):
             self.give_instructions()
         elif self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.NEXT_GAME):
@@ -124,11 +145,27 @@ class GameController(StateMachineMixin, StateMachine):
         self._current_game.first_frame_update()
         print("Starting game:", self._current_game.__class__)
 
+        self._game_idle_secs = 0.0
+
     def do_playing_game(self, delta_ms: float) -> ShouldStop:
         is_done = False
 
+        if self._towers.is_any_switch_pressed():
+            self._game_idle_secs = 0.0
+        else:
+            self._game_idle_secs += delta_ms
+            if self._game_idle_secs > GAME_CONTROLLER_GAME_IDLE_TIMEOUT_SECS:
+                self.cancel_game()
+                return
+
         if self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.RESET):
             is_done = True
+        elif isinstance(self._current_game, self._ambient_class) and (
+                self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.START) or
+                self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.NEXT_GAME)
+            ):
+                # If the user presses any button in ambient mode, go to selection mode 
+                is_done = True
         else:
             is_done = self._current_game.update(delta_ms)
 

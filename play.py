@@ -29,6 +29,7 @@ GAMES_TO_SKIP_IN_PRODUCTION: set[str] = {
     "ColorCycle",
 }
 
+AMBIENT_GAME: str = "ColorCycle"
 
 def main():
     """Run an Illuminatrix game from the command line."""
@@ -59,6 +60,10 @@ def main():
     parser.add_argument("games", nargs="*", choices=sorted(available_games.keys()), help="game to run")
 
     options = parser.parse_args()
+
+    # Get the ambient game out of the available games
+    ambient_game = available_games[AMBIENT_GAME]
+    del available_games[AMBIENT_GAME]
 
     if not options.allgames:
         for game_to_skip in GAMES_TO_SKIP_IN_PRODUCTION:
@@ -125,6 +130,7 @@ def main():
         managers,
         tower_controller,
         list(games_to_play),
+        ambient_game,
     )
 
     # Enter the game loop

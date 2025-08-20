@@ -44,3 +44,6 @@ class EffectManager(BaseSystem):
 
     def stop_all(self) -> None:
         self._active_effects = []
+
+    def are_any_playing(self) -> bool:
+        return len(self._active_effects) > 0
