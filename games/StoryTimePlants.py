@@ -1,7 +1,7 @@
 from games.StoryTimeBase import StoryTimeBase
 
 
-class StoryTimeHorror(StoryTimeBase):
+class StoryTimePlants(StoryTimeBase):
     # TODO: Make the proxy class cleaner than this hack
     PROXY = False
 
