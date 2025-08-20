@@ -25,6 +25,9 @@ from constants.constants import TowerEnum
 logger = logging.getLogger(__name__)
 
 
+JACKMIXER_USE_SERVER = True
+
+
 class MixerState(Enum):
     INIT = 0
     STARTED = 1
@@ -232,9 +235,15 @@ class JackSound(Sound):
 class JackMixer:
     def __init__(self, name: str = "jack_mixer"):
         # TODO: perhaps make the channel auto detected, as well as the force to stereo?
-        self.client: jack.Client = jack.Client(name)
         # If the server is already running, use this instead
-        # self.client: jack.Client = jack.Client(name, no_start_server=True, servername="jacko_mixer")
+        if JACKMIXER_USE_SERVER:
+            self.client: jack.Client = jack.Client(
+                name,
+                no_start_server=True,
+                servername="illuminatrix_jack_server_mixer",
+            )
+        else:
+            self.client: jack.Client = jack.Client(name)
         self.outports: list[jack.OwnPort] = []
         # self.active_sounds: list[tuple[JackSound, list[TowerEnum]]] = []
         self.active_sounds: list[tuple[Sound, list[TowerEnum]]] = []

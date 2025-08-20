@@ -122,3 +122,9 @@ class TowerController:
 
     def start_effect(self, effect: BaseEffect):
         self._effects.start_effect(effect)
+
+    def stop_effects(self):
+        self._effects.stop_all()
+
+    def are_any_effects_playing(self) -> bool:
+        return self._effects.are_any_playing()

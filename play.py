@@ -2,6 +2,7 @@ import argparse
 import logging
 import time
 from copy import copy
+from pprint import pprint
 
 from bases.BaseSystem import BaseSystem
 from components.GameController import GameController
@@ -28,9 +29,14 @@ GAMES_TO_SKIP_IN_PRODUCTION: set[str] = {
     "ColorCycle",
 }
 
+AMBIENT_GAME: str = "ColorCycle"
 
 def main():
     """Run an Illuminatrix game from the command line."""
+
+    print("*"*80)
+    print("*"*80)
+    print("*"*80)
 
     available_games = {c.__name__: c for c in find_game_classes("./games")}
 
@@ -40,6 +46,8 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("environment", choices=[x.value for x in Environment], help="specify what environment the game will be running on")
+
+    parser.add_argument("--showgamesonly", action="store_true", help="pretty print the games and exit")
 
     parser.add_argument("--id", required=False, help="id of the simulator (required if using web simulator)")
 
@@ -53,13 +61,18 @@ def main():
 
     options = parser.parse_args()
 
+    # Get the ambient game out of the available games
+    ambient_game = available_games[AMBIENT_GAME]
+    del available_games[AMBIENT_GAME]
+
     if not options.allgames:
-        print(available_games)
-        print("==")
         for game_to_skip in GAMES_TO_SKIP_IN_PRODUCTION:
             if game_to_skip in available_games:
                 del available_games[game_to_skip]
-        print(available_games)
+
+    if options.showgamesonly:
+        pprint(available_games)
+        return
 
     environment_context = ENVIRONMENT_CONTEXT[options.environment]
     context = copy(environment_context)
@@ -108,11 +121,16 @@ def main():
     if options.games:
         games_to_play = {v for v in available_games.values() if v.__name__ in options.games}
 
+    if not games_to_play:
+        print("No games selected, did you mean to specify --allgames?")
+        return
+
     game_controller = GameController(
         systems,
         managers,
         tower_controller,
         list(games_to_play),
+        ambient_game,
     )
 
     # Enter the game loop
