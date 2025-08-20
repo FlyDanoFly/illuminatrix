@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # HERTZ = 0.10  # pretty fast still
 HERTZ = 0.02  # longer and mellow, pretty
 
-COLOR_CYCLE_FADE_IN_TIME_SEC = 20.5
+COLOR_CYCLE_FADE_IN_TIME_SEC = 15.5
 COLOR_CYCLE_SUSTAIN_TIME_SEC = 0.0
 
 class ColorCycle(BaseGame):
@@ -36,7 +36,6 @@ class ColorCycle(BaseGame):
             )
             self._towers.start_effect(bing_effect)
             hue = (hue + self.hue_tower_step) % 1.0
-
 
     def update(self, delta_secs: float) -> bool | None:
         if self._towers.are_any_effects_playing():

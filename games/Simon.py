@@ -10,7 +10,7 @@ from effects.BingFade import BingFade
 
 SIMON_TIME_BETWEEN_SEQUENCE_BEATS_SECS = 1.0
 SIMON_TIME_WRONG_SECS = 0.25
-SIMON_SEQUENCES_PER_LEVEL = 2
+SIMON_SEQUENCES_PER_LEVEL = 5
 SIMON_BING_FATE_TIME_SEC = 0.75
 SIMON_BING_SUSTAIN_TIME_SEC = 0.25
 # Level up factor will be used (time_between * progressive_fator ^ level)
@@ -19,6 +19,8 @@ SIMON_LEVEL_UP_PROGRESSIVE_FACTOR = 0.9
 SIMON_LEVEL_UP_LINEAR_FACTOR = 0.1
 # Level up minimum factor, (time_between * factor) will no go below this value
 SIMON_LEVEL_UP_FACTOR_MINIMUM = 0.05
+
+random.seed()
 
 class Simon(BaseStateMachineGame):
     # Game states
