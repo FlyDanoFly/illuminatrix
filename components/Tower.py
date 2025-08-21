@@ -18,8 +18,8 @@ class Tower:
     def set_color(self, color: ColorType, light: LightPos = LightPos.All):
         self._light_system.set(self._tower_enum, color, light)
 
-    def play_sound(self, sound, volume: float = 1.0) -> Sound:
-        return self._sound_system.play(sound, [self._tower_enum], volume)
+    def play_sound(self, sound, volume: float = 1.0, num_loops: int = 0) -> Sound:
+        return self._sound_system.play(sound, [self._tower_enum], volume, num_loops)
 
     def is_switch_pressed(self) -> bool:
         return self._input_system.is_tower_switch_pressed(self._tower_enum)

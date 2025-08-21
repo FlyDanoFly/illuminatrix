@@ -21,11 +21,12 @@ class ColorCycle(BaseGame):
         self.start_hue = 0.0
         self.hue_tower_step = 1.0 / len(TowerEnum)
         self.hertz = HERTZ
+        self._towers.load_sound_bank("sound_banks/ambient")
 
     def first_frame_update(self) -> None:
         self.update(0.0)
         hue = self.start_hue
-        for tower_enum in self._towers:
+        for tower_enum, tower in self._towers.items():
             rgb = hsv_to_rgb(hue, 1.0, 1.0)
             bing_effect = BingFade(
                 [tower_enum],
@@ -36,6 +37,7 @@ class ColorCycle(BaseGame):
             )
             self._towers.start_effect(bing_effect)
             hue = (hue + self.hue_tower_step) % 1.0
+            tower.play_sound(f"ambient_tower_{tower_enum.value}", volume=0.33, num_loops=-1)
 
     def update(self, delta_secs: float) -> bool | None:
         if self._towers.are_any_effects_playing():
