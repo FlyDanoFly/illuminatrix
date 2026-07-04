@@ -49,7 +49,8 @@ class SwitchInputSystem(InputSystem):
         return super().startup()
 
     def shutdown(self) -> None:
-        # TODO: shut down the pyserial connecntion
+        # Gracefully shut down the pyserial connecntion
+        self.serial.close()
         return super().shutdown()
 
     def update(self, delta_secs: float) -> None: 
@@ -60,7 +61,6 @@ class SwitchInputSystem(InputSystem):
         rgb_data = [0,0,0] * 7
         control_leds = [0,0,0]
         frame = build_frame(rgb_data, control_leds)
-        # print("Writing", frame)
         self.serial.write(frame)
         response = self.serial.read(2)
         if len(response) == 2:
