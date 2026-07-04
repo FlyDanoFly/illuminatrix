@@ -1,5 +1,6 @@
 import argparse
 import logging
+import signal
 import time
 from copy import copy
 from pprint import pprint
@@ -19,6 +20,10 @@ from utils import find_game_classes
 logger = logging.getLogger(__name__)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)15s() ] %(message)s"
 logging.basicConfig(format=FORMAT, level=logging.WARNING)
+
+# Set up catching the kill signal
+# Makes SIGTERM behave like Ctrl-C: default_int_handler is the built-in that raises KeyboardInterrupt
+signal.signal(signal.SIGTERM, signal.default_int_handler)
 
 
 GAMES_TO_SKIP_IN_PRODUCTION: set[str] = {
