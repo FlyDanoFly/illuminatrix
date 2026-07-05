@@ -103,10 +103,6 @@ def main():
     # TODO: this might pop, black will be better for production
     tower_controller.set_color((1.0, 1.0, 1.0))
 
-    # monotonic: wall-clock time can jump (e.g. NTP sync on a Pi with no RTC),
-    # which would corrupt delta_secs and fast-forward every game timer
-    prev_time = time.monotonic()
-
     # Uncomment to see all the loggers, the long term intent is to learn
     # how to set individual logging levels on different parts of the code
     # logger_dict = logging.Logger.manager.loggerDict
@@ -141,6 +137,11 @@ def main():
     )
 
     # Enter the game loop
+    # monotonic: wall-clock time can jump (e.g. NTP sync on a Pi with no RTC),
+    # which would corrupt delta_secs and fast-forward every game timer.
+    # Captured immediately before the loop so startup time (including the
+    # serial warmup sleep above) doesn't land in the first frame's delta.
+    prev_time = time.monotonic()
     try:
         while True:
             shutdown_request = False

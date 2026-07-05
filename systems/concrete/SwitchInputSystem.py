@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 
 import serial
@@ -29,6 +30,9 @@ SERIAL_RECONNECT_INTERVAL_SECS = 1.0
 # (until then the last known state is held, so a brief glitch doesn't
 # fire phantom press/release transitions)
 SERIAL_STALE_STATE_SECS = 2.0
+# While disconnected, repeat an ERROR log at this interval so a dead
+# controller is visible in the log stream, not just one line at startup
+SERIAL_DISCONNECTED_LOG_INTERVAL_SECS = 30.0
 
 def compute_crc8(data: bytes) -> int:
     crc = 0x00
@@ -51,17 +55,21 @@ def build_frame(rgb_data: list[int], control_leds: list[int]) -> bytes:
 
 
 class SwitchInputSystem(InputSystem):
-    def __init__(self, **_):
+    def __init__(self, serial_port: str = SERIAL_PORT, baudrate: int = SERIAL_BAUDRATE, **_):
+        self._port: str = serial_port
+        self._baudrate: int = baudrate
         self._prev_switch_state: dict[TowerEnum | ControllerSwitchEnum, bool] = {}
         self._switch_state: dict[TowerEnum | ControllerSwitchEnum, bool] = {}
         self._serial: serial.Serial | None = None
         self._last_connect_attempt_secs: float = float("-inf")
         self._last_valid_response_secs: float = float("-inf")
+        self._last_disconnected_log_secs: float = float("-inf")
+        self._state_was_cleared: bool = False
 
     def startup(self) -> None:
         self._try_connect()
         if self._serial is None:
-            logger.error("Could not open %s at startup, will keep retrying", SERIAL_PORT)
+            logger.error("Could not open %s at startup, will keep retrying", self._port)
         return super().startup()
 
     def shutdown(self) -> None:
@@ -75,13 +83,33 @@ class SwitchInputSystem(InputSystem):
         if now - self._last_connect_attempt_secs < SERIAL_RECONNECT_INTERVAL_SECS:
             return
         self._last_connect_attempt_secs = now
+        # Missing device is the common failure and stat() is near-free;
+        # serial.Serial() against a mid-enumeration USB device can block
+        # the frame loop for hundreds of ms
+        if not os.path.exists(self._port):
+            logger.debug("Serial port %s not present", self._port)
+            return
         try:
-            self._serial = serial.Serial(SERIAL_PORT, SERIAL_BAUDRATE, timeout=SERIAL_TIMEOUT_SECS)
+            self._serial = serial.Serial(self._port, self._baudrate, timeout=SERIAL_TIMEOUT_SECS)
             self._serial.reset_input_buffer()
-            logger.info("Serial connection to %s established", SERIAL_PORT)
+            # Reset so a future outage logs immediately again
+            self._last_disconnected_log_secs = float("-inf")
+            logger.info("Serial connection to %s established", self._port)
         except (serial.SerialException, OSError) as e:
             self._serial = None
-            logger.debug("Serial connect attempt to %s failed: %s", SERIAL_PORT, e)
+            logger.debug("Serial connect attempt to %s failed: %s", self._port, e)
+
+    def _log_disconnected(self) -> None:
+        """Repeat an ERROR while the controller is missing — a dead input
+        system otherwise looks like a healthy idle installation."""
+        now = time.monotonic()
+        if now - self._last_disconnected_log_secs < SERIAL_DISCONNECTED_LOG_INTERVAL_SECS:
+            return
+        self._last_disconnected_log_secs = now
+        logger.error(
+            "Switch controller %s unavailable — all switches read released until it returns",
+            self._port,
+        )
 
     def _disconnect(self) -> None:
         if self._serial is None:
@@ -98,13 +126,20 @@ class SwitchInputSystem(InputSystem):
         For a brief glitch, hold the last known state so no phantom
         press/release transitions fire. If the outage persists, clear both
         current and previous state together: switches read as released
-        without ever reporting a transition.
+        without reporting a release transition, and _state_was_cleared
+        makes the first response after recovery transition-free too (a
+        switch held across the whole outage must not register as a fresh
+        press).
         """
         if time.monotonic() - self._last_valid_response_secs > SERIAL_STALE_STATE_SECS:
             self._prev_switch_state = {}
             self._switch_state = {}
+            self._state_was_cleared = True
         else:
-            self._switch_state = self._prev_switch_state
+            # Hold the last known state. Explicit copy: update() aliased
+            # prev and current to the same dict, and equal-but-distinct
+            # objects keep a future in-place mutation from corrupting both
+            self._switch_state = dict(self._prev_switch_state)
 
     def update(self, delta_secs: float) -> None:
         self._prev_switch_state = self._switch_state
@@ -112,6 +147,7 @@ class SwitchInputSystem(InputSystem):
         if self._serial is None:
             self._try_connect()
             if self._serial is None:
+                self._log_disconnected()
                 self._handle_missed_response()
                 return
 
@@ -120,13 +156,17 @@ class SwitchInputSystem(InputSystem):
         control_leds = [0,0,0]
         frame = build_frame(rgb_data, control_leds)
         try:
-            # Flush anything stale (e.g. a late response from before a
-            # reconnect) so the 2 bytes we read belong to this request
-            self._serial.reset_input_buffer()
             self._serial.write(frame)
             response = self._serial.read(2)
+            if len(response) != 2:
+                # Discard any partial remnant so a later read(2) can't
+                # span two responses. No flush on the happy path: a device
+                # whose latency exceeds the read timeout then still works
+                # one frame late instead of having every reply discarded.
+                # (A response start byte + CRC would fix this properly.)
+                self._serial.reset_input_buffer()
         except (serial.SerialException, OSError) as e:
-            logger.error("Serial I/O to %s failed, reconnecting: %s", SERIAL_PORT, e)
+            logger.error("Serial I/O to %s failed, reconnecting: %s", self._port, e)
             self._disconnect()
             self._handle_missed_response()
             return
@@ -137,15 +177,21 @@ class SwitchInputSystem(InputSystem):
             return
 
         self._last_valid_response_secs = time.monotonic()
-        self._switch_state = {}
+        new_state: dict[TowerEnum | ControllerSwitchEnum, bool] = {}
         tower_switches = response[0]
         control_switches = response[1]
         for tower_enum, bitmask in TOWER_TO_BITMASK.items():
             if tower_switches & bitmask:
-                self._switch_state[tower_enum] = True
+                new_state[tower_enum] = True
         for controller_enum, bitmask in SWITCH_TO_BITMASK.items():
             if control_switches & bitmask:
-                self._switch_state[controller_enum] = True
+                new_state[controller_enum] = True
+        if self._state_was_cleared:
+            # First response after an outage cleared the state: a switch
+            # held across the whole outage is not a fresh press
+            self._prev_switch_state = dict(new_state)
+            self._state_was_cleared = False
+        self._switch_state = new_state
 
     def render(self) -> None:
         return super().render()
