@@ -1,2 +1,12 @@
 __pycache__
-*.wav
+.DS_Store
+
+# Sound banks live in their own repository (github.com/FlyDanoFly/illuminatrix-assets),
+# checked out at sound_banks/ — the code repo never tracks them
+/sound_banks/
+
+# Scratch audio test files
+/boom.wav
+/LRMonoPhase4.wav
+/LRMonoPhase4_8ch.wav
+/wavs/
