@@ -87,12 +87,25 @@ def color_cycle(timestamp=None):
     red_on, green_on, blue_on = _PHASES[phase]
     color = [red_on * brightness, green_on * brightness, blue_on * brightness]
 
-    return [list(color) for _ in range(7)]
+    which_light = [0,1,2,3,4,5,6]
+    return [list(color) if x in which_light else list((0,0,0)) for x in range(7)]
 
 # Dano 2026-07-03
 # Companion function to constrain converted ints to 0..255
 def clamp(val, min_val, max_val):
+    clamped_val = max(min_val, min(val, max_val))
+    if clamped_val != val:
+        logger.error("clamp prevented an overflow, val=%d, clamped_val=%d", val, clamped_val)
     return max(min_val, min(val, max_val))
+
+
+def processed_color_cycle(timestamp: float=None) -> list[int]:
+    rgb_data = color_cycle(timestamp)
+    processed_rgb_data = [
+        clamp(int(round(the_color * 255)), 0, 255) for y in rgb_data
+        for the_color in y
+    ]
+    return processed_rgb_data
 
 
 def compute_crc8(data: bytes) -> int:

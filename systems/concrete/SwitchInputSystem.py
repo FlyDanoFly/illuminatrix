@@ -6,6 +6,7 @@ import serial
 
 from bases.InputSystem import InputSystem
 from constants.constants import ControllerSwitchEnum, TowerEnum
+from experiments.stomp_pad_color_cycle import processed_color_cycle
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +193,8 @@ class SwitchInputSystem(InputSystem):
                 return
 
         # TODO: dummy stomp pad data to get the switch states
-        rgb_data = [0,0,0] * 7
+        rgb_data = processed_color_cycle()
+        # rgb_data = [0,0,0] * 7
         control_leds = [0,0,0]
         request = build_frame(rgb_data, control_leds)
         try:
