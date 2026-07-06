@@ -48,7 +48,11 @@ ENVIRONMENT_CONTEXT = {
     Environment.EMBEDDED: {
         "light_system": {},
         "sound_system": {},
-        "input_system": {},
+        "input_system": {
+            # Defaults live in SwitchInputSystem; override here if the
+            # controller enumerates elsewhere, e.g.:
+            # "serial_port": "/dev/ttyACM1",
+        },
         "effect_system": {},
     },
     Environment.WEB: {
