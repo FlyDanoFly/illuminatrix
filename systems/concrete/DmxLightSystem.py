@@ -21,8 +21,9 @@ class DmxLightSystem(LightSystem):
 
     def __init__(
             self,
+            **kwargs,
         ):
-        self.dmx_controller: DmxController = DmxController()
+        self.dmx_controller: DmxController = DmxController(**kwargs)
         self.fixtures: dict[TowerEnum, list[Fixture]] = {
                 tower_enum: [
                     Fixture(id=2*(tower_enum.value-1), controller=self.dmx_controller),
@@ -51,10 +52,10 @@ class DmxLightSystem(LightSystem):
 
 
     def startup(self):
-        pass
+        self.dmx_controller.start()
 
     def shutdown(self):
-        pass
+        self.dmx_controller.stop()
 
     def set(self, tower_enum: TowerEnum, color: ColorType, light_pos: LightPos = LightPos.All):
     # def set_colors(self, towers: dict[TowerLight, Sequence[float]]) -> None:
@@ -82,4 +83,3 @@ class DmxLightSystem(LightSystem):
             self.colors[tower_enum] = vamped_color
             for fixture in self.fixtures[tower_enum]:
                 fixture.set_colour(vamped_color)
-        self.dmx_controller._send_dmx_frame()
