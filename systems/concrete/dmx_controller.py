@@ -57,6 +57,10 @@ DISCONNECTED_LOG_INTERVAL_SECS = 30.0
 # Periodic INFO line with send/ack counters — cheap soak-test breadcrumbs
 HEALTH_LOG_INTERVAL_SECS = 300.0
 
+# olad NACKing frames (e.g. nothing patched to the universe) repeats at
+# send rate; warn at this interval instead of 40x/sec
+REJECTED_LOG_INTERVAL_SECS = 10.0
+
 # stop() gives the worker this long to finish; it can be inside a socket
 # timeout, so allow a little more than SOCKET_TIMEOUT_SECS
 SHUTDOWN_JOIN_TIMEOUT_SECS = 3.0
@@ -91,7 +95,9 @@ class DmxController:
         self._outstanding_acks = 0
         self._frames_sent = 0
         self._frames_acked = 0
+        self._frames_rejected = 0
         self._last_health_log_secs = float("-inf")
+        self._last_reject_log_secs = float("-inf")
 
     # ---- main-thread API ----------------------------------------------
 
@@ -196,11 +202,21 @@ class DmxController:
         self._last_health_log_secs = now
 
         def on_ack(status) -> None:
-            self._last_ack_secs = time.monotonic()
+            now = time.monotonic()
+            self._last_ack_secs = now
             self._outstanding_acks = max(0, self._outstanding_acks - 1)
             self._frames_acked += 1
             if not status.Succeeded():
-                logger.warning("olad rejected a DMX frame for universe %d", self._universe)
+                self._frames_rejected += 1
+                if now - self._last_reject_log_secs >= REJECTED_LOG_INTERVAL_SECS:
+                    self._last_reject_log_secs = now
+                    logger.warning(
+                        "olad rejected a DMX frame for universe %d (%s) — %d rejected total; "
+                        "is anything patched to the universe?",
+                        self._universe,
+                        status.message,
+                        self._frames_rejected,
+                    )
 
         def tick() -> None:
             if self._stop_event.is_set():
@@ -245,9 +261,10 @@ class DmxController:
             if now - self._last_health_log_secs >= HEALTH_LOG_INTERVAL_SECS:
                 self._last_health_log_secs = now
                 logger.info(
-                    "DMX health: %d frames sent, %d acked, %d awaiting ack",
+                    "DMX health: %d frames sent, %d acked, %d rejected, %d awaiting ack",
                     self._frames_sent,
                     self._frames_acked,
+                    self._frames_rejected,
                     self._outstanding_acks,
                 )
 

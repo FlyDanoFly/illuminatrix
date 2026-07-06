@@ -21,6 +21,7 @@ from systems.concrete.dmx_controller import (  # noqa: E402
 class FakeStatus:
     def __init__(self, succeeded: bool = True):
         self._succeeded = succeeded
+        self.message = None if succeeded else "fake rejection"
 
     def Succeeded(self) -> bool:
         return self._succeeded
@@ -31,13 +32,14 @@ class FakeClient:
         self.sent: list[tuple[int, bytes]] = []
         self.accept_sends = True
         self.ack_sends = True
+        self.ack_succeeds = True
 
     def SendDmx(self, universe, data, callback) -> bool:
         if not self.accept_sends:
             return False
         self.sent.append((universe, data.tobytes()))
         if self.ack_sends:
-            callback(FakeStatus())
+            callback(FakeStatus(self.ack_succeeds))
         return True
 
 
@@ -167,6 +169,20 @@ class TestRunLoop(unittest.TestCase):
 
         controller._run(FakeWrapper(client, max_ticks=5, between_ticks=between_ticks))
         self.assertGreaterEqual(len(client.sent), sent_before)
+
+    def test_rejected_frames_counted_but_not_fatal(self):
+        # A NACK (e.g. nothing patched to the universe) is a config
+        # problem, not a connection problem: keep sending, count it
+        controller = DmxController()
+        client = FakeClient()
+        client.ack_succeeds = False
+
+        def between_ticks(_tick):
+            controller.set_fixture_colour(0, (1, 2, 3))
+
+        controller._run(FakeWrapper(client, max_ticks=5, between_ticks=between_ticks))
+        self.assertGreater(len(client.sent), 1)
+        self.assertEqual(controller._frames_rejected, len(client.sent))
 
     def test_stop_event_stops_the_wrapper(self):
         controller = DmxController()
