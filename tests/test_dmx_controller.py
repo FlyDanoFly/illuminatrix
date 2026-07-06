@@ -6,6 +6,7 @@ and the fake client acks immediately, so every send/ack/dirty interaction
 is deterministic.
 """
 
+import socket
 import sys
 import unittest
 from pathlib import Path
@@ -96,6 +97,26 @@ class TestChannelBuffer(unittest.TestCase):
         controller.set_fixture_colour(0, (1, 2, 3))
         self.assertTrue(controller._dirty)
 
+    def test_wrong_length_rgb_rejected(self):
+        with self.assertRaises(ValueError):
+            DmxController().set_fixture_colour(0, (1, 2, 3, 4))
+
+    def test_fixture_past_universe_end_rejected(self):
+        # fixture 51 * width 10 = channel 510: the intensity write fits
+        # but the rgb slice would silently grow the buffer past 512
+        with self.assertRaises(ValueError):
+            DmxController(fixture_channel_width=10).set_fixture_colour(51, (1, 2, 3))
+
+    def test_float_rgb_rejected(self):
+        with self.assertRaises(TypeError):
+            DmxController().set_fixture_colour(0, (0.5, 0.2, 0.1))
+
+    def test_unknown_config_keys_warned_not_fatal(self):
+        # ENVIRONMENT_CONTEXT constructors tolerate extra keys by
+        # convention, but a typo must at least leave a trace in the log
+        with self.assertLogs("systems.concrete.dmx_controller", level="WARNING"):
+            DmxController(univese=3)
+
 
 class TestRunLoop(unittest.TestCase):
     def test_initial_frame_sent_once_then_quiet(self):
@@ -161,14 +182,15 @@ class TestRunLoop(unittest.TestCase):
         controller = DmxController()
         client = FakeClient()
         # Same backdating as above, but acks arrive: on_ack refreshes the
-        # clock and clears the outstanding count, so no timeout fires
-        sent_before = 0
+        # clock and clears the outstanding count, so no timeout fires and
+        # sends keep flowing across every backdated tick
 
         def between_ticks(_tick):
             controller._last_ack_secs -= ACK_TIMEOUT_SECS + 1.0
+            controller.set_fixture_colour(0, (5, 5, 5))
 
         controller._run(FakeWrapper(client, max_ticks=5, between_ticks=between_ticks))
-        self.assertGreaterEqual(len(client.sent), sent_before)
+        self.assertGreater(len(client.sent), 1)
 
     def test_rejected_frames_counted_but_not_fatal(self):
         # A NACK (e.g. nothing patched to the universe) is a config
@@ -183,6 +205,46 @@ class TestRunLoop(unittest.TestCase):
         controller._run(FakeWrapper(client, max_ticks=5, between_ticks=between_ticks))
         self.assertGreater(len(client.sent), 1)
         self.assertEqual(controller._frames_rejected, len(client.sent))
+        # A NACK is not a success: confirmed and rejected must not both count
+        self.assertEqual(controller._frames_acked, 0)
+
+    def test_peer_close_detected_by_eof_probe(self):
+        # olad hanging up is invisible to the library's read path on
+        # Python 3; the tick's select-and-peek probe must catch it.
+        # Real sockets, not fakes: the probe's semantics live in the OS.
+        controller = DmxController()
+        client = FakeClient()
+        local, remote = socket.socketpair()
+        try:
+            remote.close()  # peer hangs up: local is readable with EOF
+            with self.assertRaises(ConnectionError):
+                controller._run(FakeWrapper(client, max_ticks=5), sock=local)
+        finally:
+            local.close()
+
+    def test_quiet_connection_is_not_a_close(self):
+        controller = DmxController()
+        client = FakeClient()
+        local, remote = socket.socketpair()
+        try:
+            local.settimeout(1.0)  # timeout mode, like the real connection
+            controller._run(FakeWrapper(client, max_ticks=3), sock=local)
+            self.assertEqual(len(client.sent), 1)
+        finally:
+            local.close()
+            remote.close()
+
+    def test_pending_data_is_not_a_close(self):
+        controller = DmxController()
+        client = FakeClient()
+        local, remote = socket.socketpair()
+        try:
+            remote.send(b"\x01")  # unread RPC response waiting: readable, not EOF
+            controller._run(FakeWrapper(client, max_ticks=3), sock=local)
+            self.assertEqual(len(client.sent), 1)
+        finally:
+            local.close()
+            remote.close()
 
     def test_stop_event_stops_the_wrapper(self):
         controller = DmxController()

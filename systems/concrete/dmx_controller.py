@@ -17,6 +17,7 @@ timeout, so no call can block forever.
 
 import array
 import logging
+import select
 import socket
 import threading
 import time
@@ -73,8 +74,14 @@ class DmxController:
         self,
         universe: int = DEFAULT_UNIVERSE,
         fixture_channel_width: int = DEFAULT_FIXTURE_CHANNEL_WIDTH,
-        **_,
+        **unexpected,
     ):
+        if unexpected:
+            # Constructors fed from ENVIRONMENT_CONTEXT tolerate extra keys
+            # by convention, but a silent typo costs a default-config show
+            logger.warning(
+                "DmxController ignoring unknown config keys: %s", sorted(unexpected)
+            )
         self._universe = universe
         self._fixture_channel_width = fixture_channel_width
 
@@ -88,15 +95,15 @@ class DmxController:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
-        # Worker-owned bookkeeping (only the worker thread touches these
-        # while it runs; initialized here so tests can drive _run directly)
-        self._last_send_secs = float("-inf")
-        self._last_ack_secs = float("-inf")
-        self._outstanding_acks = 0
+        # Lifetime counters and log throttles; they survive reconnects.
+        # The health timer is armed once here, NOT per connection, so a
+        # flapping olad can't keep resetting it below the log interval.
+        # The per-connection clocks (_last_send_secs, _last_ack_secs,
+        # _outstanding_acks) are owned and seeded by _run alone.
         self._frames_sent = 0
         self._frames_acked = 0
         self._frames_rejected = 0
-        self._last_health_log_secs = float("-inf")
+        self._last_health_log_secs = time.monotonic()
         self._last_reject_log_secs = float("-inf")
 
     # ---- main-thread API ----------------------------------------------
@@ -131,10 +138,20 @@ class DmxController:
         """Stage a fixture color; the worker sends it on its next tick.
         Latest-wins: setting a color twice between ticks sends only the
         second, so a burst of updates can never queue anything."""
+        rgb_bytes = bytes(rgb)  # rejects floats and values outside 0..255
+        if len(rgb_bytes) != 3:
+            raise ValueError(f"rgb must be exactly 3 channels, got {len(rgb_bytes)}")
         base = fixture_id * self._fixture_channel_width
+        if not 0 <= base <= DMX_UNIVERSE_SIZE - 4:
+            # A slice write past the end would silently GROW the bytearray
+            # and corrupt every later frame; fail loudly instead
+            raise ValueError(
+                f"fixture {fixture_id} (channels {base}..{base + 3}) is outside "
+                f"the {DMX_UNIVERSE_SIZE}-channel universe"
+            )
         with self._lock:
             self._channels[base] = 255  # intensity
-            self._channels[base + 1 : base + 4] = bytes(rgb)
+            self._channels[base + 1 : base + 4] = rgb_bytes
             self._dirty = True
 
     # ---- worker thread --------------------------------------------------
@@ -172,9 +189,14 @@ class DmxController:
             logger.info("Connected to olad on universe %d", self._universe)
 
             try:
-                self._run(wrapper)
+                self._run(wrapper, sock)
             except (OLADNotRunningException, OSError) as e:
                 logger.error("DMX I/O failed, reconnecting: %s", e)
+            except Exception:
+                # The worker must outlive anything the OLA client throws
+                # (protobuf decode errors are not OSErrors); a dead worker
+                # means frozen lights until a process restart
+                logger.exception("Unexpected DMX worker failure, reconnecting")
             finally:
                 with self._lock:
                     self._wrapper = None
@@ -186,7 +208,7 @@ class DmxController:
             self._stop_event.wait(RECONNECT_INTERVAL_SECS)
         logger.info("DMX worker stopped")
 
-    def _run(self, wrapper) -> None:
+    def _run(self, wrapper, sock=None) -> None:
         """Drive one connection until stop() or a failure.
 
         Runs the wrapper's select loop the way OLA intends: it consumes
@@ -195,18 +217,17 @@ class DmxController:
         _worker's reconnect path.
         """
         client = wrapper.Client()
-        now = time.monotonic()
         self._last_send_secs = float("-inf")
-        self._last_ack_secs = now
+        self._last_ack_secs = time.monotonic()
         self._outstanding_acks = 0
-        self._last_health_log_secs = now
 
         def on_ack(status) -> None:
             now = time.monotonic()
             self._last_ack_secs = now
             self._outstanding_acks = max(0, self._outstanding_acks - 1)
-            self._frames_acked += 1
-            if not status.Succeeded():
+            if status.Succeeded():
+                self._frames_acked += 1
+            else:
                 self._frames_rejected += 1
                 if now - self._last_reject_log_secs >= REJECTED_LOG_INTERVAL_SECS:
                     self._last_reject_log_secs = now
@@ -225,6 +246,18 @@ class DmxController:
             wrapper.AddEvent(TICK_INTERVAL_MS, tick)
             now = time.monotonic()
 
+            # A peer close never surfaces through the wrapper's read path
+            # (the library's EOF check predates Python 3: it compares
+            # recv() against '' instead of b'', so the close branch is
+            # dead code and select() spins on the half-closed fd). Probe
+            # for EOF here: readable + b"" peek means olad hung up.
+            # select-then-peek, because a bare recv on this timeout-mode
+            # socket would wait the full socket timeout when idle.
+            if sock is not None:
+                readable, _, _ = select.select([sock], [], [], 0)
+                if readable and sock.recv(1, socket.MSG_PEEK) == b"":
+                    raise ConnectionError("olad closed the connection")
+
             if (
                 self._outstanding_acks > 0
                 and now - self._last_ack_secs > ACK_TIMEOUT_SECS
@@ -234,12 +267,17 @@ class DmxController:
                     f"({self._outstanding_acks} outstanding)"
                 )
 
+            # Snapshot the channels only when a send is due — copying
+            # 512 bytes under the lock 40x/sec while idle starves the
+            # game loop's set_fixture_colour for nothing
+            data = None
             with self._lock:
                 dirty = self._dirty
-                self._dirty = False
-                data = array.array("B", self._channels)
+                if dirty or now - self._last_send_secs >= KEEPALIVE_INTERVAL_SECS:
+                    self._dirty = False
+                    data = array.array("B", self._channels)
 
-            if dirty or now - self._last_send_secs >= KEEPALIVE_INTERVAL_SECS:
+            if data is not None:
                 if self._outstanding_acks == 0:
                     # The ack clock only matters while something is in
                     # flight; restart it so idle time doesn't count
@@ -252,16 +290,17 @@ class DmxController:
                     raise ConnectionError("SendDmx refused the frame (socket closed)")
                 self._last_send_secs = now
                 self._frames_sent += 1
-                logger.debug(
-                    "DMX frame sent (dirty=%s): %s...",
-                    dirty,
-                    data.tobytes()[: 4 * self._fixture_channel_width].hex(),
-                )
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "DMX frame sent (dirty=%s): %s...",
+                        dirty,
+                        data.tobytes()[: 4 * self._fixture_channel_width].hex(),
+                    )
 
             if now - self._last_health_log_secs >= HEALTH_LOG_INTERVAL_SECS:
                 self._last_health_log_secs = now
                 logger.info(
-                    "DMX health: %d frames sent, %d acked, %d rejected, %d awaiting ack",
+                    "DMX health: %d frames sent, %d confirmed, %d rejected, %d awaiting ack",
                     self._frames_sent,
                     self._frames_acked,
                     self._frames_rejected,
