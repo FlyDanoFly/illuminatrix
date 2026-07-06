@@ -59,7 +59,7 @@ def build_frame(rgb_data: list[int], control_leds: list[int]) -> bytes:
     return bytes([SERIAL_FRAME_START_BYTE]) + data + bytes([crc])
 
 
-def extract_latest_response(buffer: bytearray) -> tuple[int, int] | None:
+def extract_latest_response(buffer: bytearray) -> tuple[int, ...] | None:
     """Consume every complete, CRC-valid response frame in the buffer and
     return the newest (tower_switches, control_switches), or None if no
     complete valid frame is present yet.
@@ -68,7 +68,7 @@ def extract_latest_response(buffer: bytearray) -> tuple[int, int] | None:
     byte fails CRC and resyncs); an incomplete frame at the tail is left
     in place for a later read to finish.
     """
-    latest: tuple[int, int] | None = None
+    latest: tuple[int, ...] | None = None
     while True:
         start = buffer.find(SERIAL_FRAME_START_BYTE)
         if start == -1:
@@ -78,9 +78,9 @@ def extract_latest_response(buffer: bytearray) -> tuple[int, int] | None:
             del buffer[:start]
         if len(buffer) < RESPONSE_FRAME_SIZE:
             return latest
-        payload = bytes(buffer[1:3])
-        if compute_crc8(payload) == buffer[3]:
-            latest = (payload[0], payload[1])
+        payload = bytes(buffer[1:RESPONSE_FRAME_SIZE-1])
+        if compute_crc8(payload) == buffer[RESPONSE_FRAME_SIZE-1]:
+            latest = tuple(payload[:RESPONSE_FRAME_SIZE-1])
             del buffer[:RESPONSE_FRAME_SIZE]
         else:
             del buffer[:1]
@@ -202,6 +202,8 @@ class SwitchInputSystem(InputSystem):
             # waits on the wire, so a silent device costs nothing.
             if self._serial.in_waiting:
                 self._rx_buffer.extend(self._serial.read(self._serial.in_waiting))
+            logger.debug("recv %s", self._rx_buffer.hex())
+            logger.debug("send %s", request.hex())
             self._serial.write(request)
         except (serial.SerialException, OSError) as e:
             logger.error("Serial I/O to %s failed, reconnecting: %s", self._port, e)
@@ -221,7 +223,7 @@ class SwitchInputSystem(InputSystem):
 
         self._last_valid_response_secs = time.monotonic()
         new_state: dict[TowerEnum | ControllerSwitchEnum, bool] = {}
-        tower_switches, control_switches = payload
+        tower_switches, control_switches, *_ = payload
         for tower_enum, bitmask in TOWER_TO_BITMASK.items():
             if tower_switches & bitmask:
                 new_state[tower_enum] = True

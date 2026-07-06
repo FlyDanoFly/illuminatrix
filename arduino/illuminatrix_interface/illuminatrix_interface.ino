@@ -179,14 +179,24 @@ void loop() {
 
       // ---- switch readback, framed like the request ----
       uint8_t response[RESPONSE_SIZE];
-      response[0] = FRAME_START_BYTE;
-      response[1] = 0;   // tower switches
-      response[2] = 0;   // control switches
+      int bytePos = 0;
+      response[bytePos] = FRAME_START_BYTE;
+      bytePos += 1;
+
+      // tower switches
+      response[bytePos] = 0;
       for (int i = 0; i < NUM_TOWERS; i++)
-        if (digitalRead(towerSwitchPins[i]) == LOW)  response[1] |= (1 << i);
+        if (digitalRead(towerSwitchPins[i]) == LOW)  response[bytePos] |= (1 << i);
+      bytePos += 1;
+
+      // control switches
+      response[bytePos] = 0;
       for (int i = 0; i < NUM_CONTROL; i++)
-        if (digitalRead(controlSwitchPins[i]) == LOW) response[2] |= (1 << i);
-      response[3] = computeCRC8(&response[1], 2);
+        if (digitalRead(controlSwitchPins[i]) == LOW) response[bytePos] |= (1 << i);
+      bytePos += 1;
+
+      // CRC
+      response[bytePos] = computeCRC8(&response[1], RESPONSE_SIZE-2);
 
       Serial.write(response, RESPONSE_SIZE);
     }
