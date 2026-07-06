@@ -16,7 +16,7 @@ set -euo pipefail
 SERVICE="illuminatrix"
 PORT="/dev/ttyACM0"
 FQBN="arduino:avr:mega"
-SKETCH="$HOME/Projects/from_illuminatrix_box/arduino/illuminatrix_interface"   # sketch folder
+SKETCH="$HOME/Projects/Illuminatrix/python/illuminatrix/arduino/illuminatrix_interface"   # sketch folder
 # ---------------------------------------------------------------------------
 
 compile_only=false
