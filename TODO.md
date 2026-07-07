@@ -10,8 +10,8 @@ controller rewritten on the `dmx-rewrite` branch.
       are the signal; `kill -USR1` for a live stack dump if anything wedges)
 - [x] Replace the dummy stomp-pad color-cycle data in `SwitchInputSystem.update()`
       with real game-driven RGB — done on the `inputsystem-unify` branch: the
-      serial link is now `StompPadController` (light sink + input source),
-      `SwitchInputSystem` is a facade over it, and `DmxLightSystem` routes
+      serial link is now `SerialController` (light sink + input source),
+      `SwitchInputSystem` is a facade over it, and `EmbeddedLightSystem` routes
       `LightPos.Pad_*` to it (pads mirror tower color by default since games set
       `LightPos.All`). Needs a hardware check: pads should follow tower colors
 - [ ] Decide whether `LightPos.Pad_top`/`Pad_bottom` stay merged (one physical

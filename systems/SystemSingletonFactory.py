@@ -1,9 +1,9 @@
-# from DmxLightSystem import DmxLightSystem
 from bases.InputSystem import InputSystem
 from bases.LightSystem import LightSystem
 from bases.SoundSystem import SoundSystem
 from constants.constants import Environment
-from systems.concrete.DmxLightSystem import DmxLightSystem
+from systems.concrete.dmx_controller import DmxController
+from systems.concrete.EmbeddedLightSystem import EmbeddedLightSystem
 from systems.concrete.JackSoundSystem import JackSoundSystem
 from systems.concrete.KeyboardInputSystem import KeyboardInputSystem
 from systems.concrete.PrintInputSystem import PrintInputSystem
@@ -16,7 +16,7 @@ from systems.concrete.WebSimulationLightSystem import WebSimulationLightSystem
 class SystemSingletonFactory:
     # TODO: flip this so these are grouped by environment
     LIGHT_SYSTEM_MAP: dict[Environment, type[LightSystem]] = {
-        Environment.EMBEDDED: DmxLightSystem,
+        Environment.EMBEDDED: EmbeddedLightSystem,
         Environment.WEB: WebSimulationLightSystem,
         Environment.PRINT: PrintLightSystem,
     }
@@ -42,13 +42,18 @@ class SystemSingletonFactory:
         input_system = SystemSingletonFactory.INPUT_SYSTEM_MAP[self.mode]
         self._input_system = input_system(**self.context["input_system"])
 
-        # The pad LEDs ride the same serial link as the switches, so the
-        # light system borrows the input system's controller; the input
-        # system owns its lifecycle
+        # The embedded light system's controllers are constructed here,
+        # not by the class: the DMX controller from its config dict in the
+        # context, and the serial controller shared with the input system
+        # (same link carries pad colors down and switch states up; its
+        # start/stop are refcounted, so each system runs the lifecycle
+        # independently)
         light_kwargs = dict(self.context["light_system"])
-        if isinstance(self._input_system, SwitchInputSystem):
-            light_kwargs["stomp_pad_controller"] = self._input_system.stomp_pads
         light_system = SystemSingletonFactory.LIGHT_SYSTEM_MAP[self.mode]
+        if light_system is EmbeddedLightSystem:
+            light_kwargs["dmx_controller"] = DmxController(**light_kwargs.pop("dmx_controller", {}))
+        if isinstance(self._input_system, SwitchInputSystem):
+            light_kwargs["serial_controller"] = self._input_system.serial_controller
         self._light_system = light_system(**light_kwargs)
 
         sound_system = SystemSingletonFactory.SOUND_SYSTEM_MAP[self.mode]

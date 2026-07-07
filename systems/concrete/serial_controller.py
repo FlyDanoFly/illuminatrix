@@ -1,10 +1,14 @@
-"""Serial link to the stomp-pad controller (the Arduino).
+"""Serial transport to the switch/pad controller (the Arduino).
 
 One physical peripheral serving two logical roles: a light sink (7 pad
 RGBs + 3 control-LED bytes down) and an input source (switch bits up).
 This module owns the wire — framing, CRC, reconnect, stale detection —
 and nothing game-facing. SwitchInputSystem reads switches through it;
-the light system writes pad colors into it.
+EmbeddedLightSystem writes pad colors into it.
+
+Because two systems share the link, start()/stop() are refcounted:
+each system calls both during its own startup/shutdown, in any order,
+and the port is open exactly while at least one system is running.
 """
 
 import logging
@@ -93,10 +97,11 @@ def extract_latest_response(buffer: bytearray) -> tuple[int, ...] | None:
             del buffer[:1]
 
 
-class StompPadController:
+class SerialController:
     def __init__(self, serial_port: str = SERIAL_PORT, baudrate: int = SERIAL_BAUDRATE):
         self._port: str = serial_port
         self._baudrate: int = baudrate
+        self._active_systems: int = 0
         self._serial: serial.Serial | None = None
         self._rx_buffer: bytearray = bytearray()
         self._last_connect_attempt_secs: float = float("-inf")
@@ -108,12 +113,23 @@ class StompPadController:
         self._control_leds: list[int] = [0, 0, 0]
 
     def start(self) -> None:
+        """Refcounted with stop(): the port opens on the first start and
+        closes on the last stop, so the input and light systems can each
+        run their own startup/shutdown in any order."""
+        self._active_systems += 1
+        if self._active_systems > 1:
+            return
         self._try_connect()
         if self._serial is None:
             logger.error("Could not open %s at startup, will keep retrying", self._port)
 
     def stop(self) -> None:
-        self._disconnect()
+        if self._active_systems == 0:
+            logger.warning("SerialController.stop() without a matching start(), ignoring")
+            return
+        self._active_systems -= 1
+        if self._active_systems == 0:
+            self._disconnect()
 
     def set_pad_color(self, tower_enum: TowerEnum, rgb: tuple[int, int, int]) -> None:
         """Queue a pad's RGB (0-255 per channel) for the next exchange."""

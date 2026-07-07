@@ -1,16 +1,16 @@
-"""Input-system facade over the stomp-pad serial link.
+"""Input-system facade over the switch/pad serial link.
 
-The wire itself (framing, CRC, reconnect) lives in StompPadController;
+The wire itself (framing, CRC, reconnect) lives in SerialController;
 this class turns its per-frame responses into the InputSystem state
 contract: hold briefly through glitches, read released during outages,
 and never fire phantom transitions at either edge of an outage.
 """
 
 from bases.InputSystem import InputSystem, SwitchKey
-from systems.concrete.stomp_pad_controller import (
+from systems.concrete.serial_controller import (
     SERIAL_BAUDRATE,
     SERIAL_PORT,
-    StompPadController,
+    SerialController,
 )
 
 
@@ -19,29 +19,30 @@ class SwitchInputSystem(InputSystem):
             self,
             serial_port: str = SERIAL_PORT,
             baudrate: int = SERIAL_BAUDRATE,
-            stomp_pad_controller: StompPadController | None = None,
+            serial_controller: SerialController | None = None,
             **_,
         ):
         super().__init__(**_)
-        self._stomp_pads = stomp_pad_controller or StompPadController(serial_port, baudrate)
+        self._serial_controller = serial_controller or SerialController(serial_port, baudrate)
         self._state_was_cleared: bool = False
 
     @property
-    def stomp_pads(self) -> StompPadController:
-        """The shared serial link; the light system borrows it to set pad
-        colors. Lifecycle (start/stop) is owned here."""
-        return self._stomp_pads
+    def serial_controller(self) -> SerialController:
+        """The serial link, shared with the light system (it sets pad
+        colors through it). Its start/stop are refcounted, so each system
+        runs the lifecycle independently."""
+        return self._serial_controller
 
     def startup(self) -> None:
-        self._stomp_pads.start()
+        self._serial_controller.start()
         return super().startup()
 
     def shutdown(self) -> None:
-        self._stomp_pads.stop()
+        self._serial_controller.stop()
         return super().shutdown()
 
     def _read_switches(self, delta_secs: float) -> None:
-        pressed = self._stomp_pads.exchange()
+        pressed = self._serial_controller.exchange()
         if pressed is None:
             self._handle_missed_response()
             return
@@ -64,7 +65,7 @@ class SwitchInputSystem(InputSystem):
         switch held across the whole outage must not register as a fresh
         press).
         """
-        if self._stomp_pads.is_stale:
+        if self._serial_controller.is_stale:
             self._prev_switch_state = {}
             self._switch_state = {}
             self._state_was_cleared = True

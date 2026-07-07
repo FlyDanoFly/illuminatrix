@@ -46,7 +46,11 @@ class Environment(StrEnum):
 
 ENVIRONMENT_CONTEXT = {
     Environment.EMBEDDED: {
-        "light_system": {},
+        "light_system": {
+            # DmxController config; defaults live in dmx_controller.py.
+            # Override here if needed, e.g.: {"universe": 1}
+            "dmx_controller": {},
+        },
         "sound_system": {},
         "input_system": {
             # Defaults live in SwitchInputSystem; override here if the
