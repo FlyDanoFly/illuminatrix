@@ -39,9 +39,9 @@ class EmbeddedLightSystem(LightSystem):
             **_,
         ):
         # The serial controller is shared with the input system (same
-        # link carries pad colors down and switch states up); its
-        # start/stop are refcounted, so each system runs the lifecycle
-        # independently
+        # link carries pad colors down and switch states up) and updated
+        # by the game loop; its lifecycle is refcounted, so each
+        # participant runs it independently
         self._serial_controller = serial_controller
         self._dmx_controller = dmx_controller
         self.fixtures: dict[TowerEnum, list[DmxFixture]] = {} if dmx_controller is None else {
@@ -60,13 +60,13 @@ class EmbeddedLightSystem(LightSystem):
         if self._dmx_controller is not None:
             self._dmx_controller.start()
         if self._serial_controller is not None:
-            self._serial_controller.start()
+            self._serial_controller.startup()
 
     def shutdown(self):
         if self._dmx_controller is not None:
             self._dmx_controller.stop()
         if self._serial_controller is not None:
-            self._serial_controller.stop()
+            self._serial_controller.shutdown()
 
     def set(self, tower_enum: TowerEnum, color: ColorType, light_pos: LightPos = LightPos.All):
         """

@@ -97,13 +97,10 @@ def main():
             parser.error("running a web simulation requires --id")
         context["light_system"]["client_id"] = options.id
 
-    # Instantiate the systems
+    # Instantiate the systems; the factory owns the per-frame update
+    # order (transports first, then the systems)
     systems = SystemSingletonFactory(options.environment, context)
-    active_systems: list[BaseSystem] = [
-        systems.get_light_system(),
-        systems.get_sound_system(),
-        systems.get_input_system(),
-    ]
+    active_systems: list[BaseSystem] = systems.get_active_systems()
 
     managers: ManagerSingletonFactory = ManagerSingletonFactory(systems)
     active_managers: list[BaseSystem] = [

@@ -1,3 +1,4 @@
+from bases.BaseSystem import BaseSystem
 from bases.InputSystem import InputSystem
 from bases.LightSystem import LightSystem
 from bases.SoundSystem import SoundSystem
@@ -34,6 +35,7 @@ class SystemSingletonFactory:
     _light_system: LightSystem
     _sound_system: SoundSystem
     _input_system: InputSystem
+    _active_systems: list[BaseSystem]
 
     def __init__(self, mode: Environment, context: dict):
         self.mode: Environment = mode
@@ -58,6 +60,25 @@ class SystemSingletonFactory:
 
         sound_system = SystemSingletonFactory.SOUND_SYSTEM_MAP[self.mode]
         self._sound_system = sound_system(**self.context["sound_system"])
+
+        # Everything the game loop drives each frame, in update order.
+        # The serial transport goes first: its exchange sends the colors
+        # the game/effect updates just staged and caches the switch
+        # response, so the input system reading pressed_switches later
+        # this frame sees this frame's exchange
+        self._active_systems = []
+        if isinstance(self._input_system, SwitchInputSystem):
+            self._active_systems.append(self._input_system.serial_controller)
+        self._active_systems += [
+            self._light_system,
+            self._sound_system,
+            self._input_system,
+        ]
+
+    def get_active_systems(self) -> list[BaseSystem]:
+        """Every per-frame participant in loop order: the three systems
+        plus any transports that ride the loop."""
+        return list(self._active_systems)
 
     def get_light_system(self) -> LightSystem:
         return self._light_system

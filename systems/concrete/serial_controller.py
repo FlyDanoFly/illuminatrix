@@ -6,9 +6,12 @@ This module owns the wire — framing, CRC, reconnect, stale detection —
 and nothing game-facing. SwitchInputSystem reads switches through it;
 EmbeddedLightSystem writes pad colors into it.
 
-Because two systems share the link, start()/stop() are refcounted:
-each system calls both during its own startup/shutdown, in any order,
-and the port is open exactly while at least one system is running.
+The transport rides the game loop as a system in its own right:
+update() runs one exchange per frame (the request carries the staged
+colors; whatever response has arrived is parsed and cached behind
+pressed_switches). Because the loop and both sharing systems all manage
+it, startup()/shutdown() are refcounted: the port is open exactly while
+at least one of them is running.
 """
 
 import logging
@@ -17,6 +20,7 @@ import time
 
 import serial
 
+from bases.BaseSystem import BaseSystem
 from constants.constants import ControllerSwitchEnum, TowerEnum
 
 logger = logging.getLogger(__name__)
@@ -97,11 +101,12 @@ def extract_latest_response(buffer: bytearray) -> tuple[int, ...] | None:
             del buffer[:1]
 
 
-class SerialController:
+class SerialController(BaseSystem):
     def __init__(self, serial_port: str = SERIAL_PORT, baudrate: int = SERIAL_BAUDRATE):
         self._port: str = serial_port
         self._baudrate: int = baudrate
         self._active_systems: int = 0
+        self._latest_pressed: set[TowerEnum | ControllerSwitchEnum] | None = None
         self._serial: serial.Serial | None = None
         self._rx_buffer: bytearray = bytearray()
         self._last_connect_attempt_secs: float = float("-inf")
@@ -112,10 +117,10 @@ class SerialController:
         }
         self._control_leds: list[int] = [0, 0, 0]
 
-    def start(self) -> None:
-        """Refcounted with stop(): the port opens on the first start and
-        closes on the last stop, so the input and light systems can each
-        run their own startup/shutdown in any order."""
+    def startup(self) -> None:
+        """Refcounted with shutdown(): the port opens on the first startup
+        and closes on the last shutdown, so the game loop and both systems
+        sharing the link can each run the lifecycle in any order."""
         self._active_systems += 1
         if self._active_systems > 1:
             return
@@ -123,13 +128,30 @@ class SerialController:
         if self._serial is None:
             logger.error("Could not open %s at startup, will keep retrying", self._port)
 
-    def stop(self) -> None:
+    def shutdown(self) -> None:
         if self._active_systems == 0:
-            logger.warning("SerialController.stop() without a matching start(), ignoring")
+            logger.warning("SerialController.shutdown() without a matching startup(), ignoring")
             return
         self._active_systems -= 1
         if self._active_systems == 0:
             self._disconnect()
+
+    def update(self, delta_secs: float) -> None:
+        """One frame of serial traffic, driven by the game loop like any
+        other system — ordered before the others so anything reading
+        pressed_switches later in the frame sees this frame's exchange."""
+        if self._active_systems == 0:
+            return
+        self._latest_pressed = self._exchange()
+
+    def render(self) -> None:
+        pass
+
+    @property
+    def pressed_switches(self) -> set[TowerEnum | ControllerSwitchEnum] | None:
+        """The pressed set from the newest update()'s exchange, or None if
+        it produced no valid response (or no exchange has happened yet)."""
+        return self._latest_pressed
 
     def set_pad_color(self, tower_enum: TowerEnum, rgb: tuple[int, int, int]) -> None:
         """Queue a pad's RGB (0-255 per channel) for the next exchange."""
@@ -145,7 +167,7 @@ class SerialController:
         last known switch state is no longer trustworthy."""
         return time.monotonic() - self._last_valid_response_secs > SERIAL_STALE_STATE_SECS
 
-    def exchange(self) -> set[TowerEnum | ControllerSwitchEnum] | None:
+    def _exchange(self) -> set[TowerEnum | ControllerSwitchEnum] | None:
         """One frame's worth of serial traffic: consume whatever response
         bytes have arrived, send the current colors, and return the set of
         pressed switches from the newest valid response — or None if no

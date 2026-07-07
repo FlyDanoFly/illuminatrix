@@ -1,7 +1,8 @@
 """Input-system facade over the switch/pad serial link.
 
-The wire itself (framing, CRC, reconnect) lives in SerialController;
-this class turns its per-frame responses into the InputSystem state
+The wire itself (framing, CRC, reconnect) lives in SerialController,
+which the game loop updates once per frame before this system; this
+class turns its cached per-frame responses into the InputSystem state
 contract: hold briefly through glitches, read released during outages,
 and never fire phantom transitions at either edge of an outage.
 """
@@ -29,20 +30,20 @@ class SwitchInputSystem(InputSystem):
     @property
     def serial_controller(self) -> SerialController:
         """The serial link, shared with the light system (it sets pad
-        colors through it). Its start/stop are refcounted, so each system
-        runs the lifecycle independently."""
+        colors through it) and updated by the game loop. Its lifecycle is
+        refcounted, so each participant runs it independently."""
         return self._serial_controller
 
     def startup(self) -> None:
-        self._serial_controller.start()
+        self._serial_controller.startup()
         return super().startup()
 
     def shutdown(self) -> None:
-        self._serial_controller.stop()
+        self._serial_controller.shutdown()
         return super().shutdown()
 
     def _read_switches(self, delta_secs: float) -> None:
-        pressed = self._serial_controller.exchange()
+        pressed = self._serial_controller.pressed_switches
         if pressed is None:
             self._handle_missed_response()
             return

@@ -16,6 +16,11 @@ controller rewritten on the `dmx-rewrite` branch.
       `LightPos.All`). Needs a hardware check: pads should follow tower colors
 - [ ] Decide whether `LightPos.Pad_top`/`Pad_bottom` stay merged (one physical
       RGB per pad today) or the hardware grows a second addressable LED
+- [ ] Fix or drop the PRINT environment: `PrintSoundSystem` is missing three
+      abstract method implementations (`are_any_sounds_playing`,
+      `load_sound_bank`, `stop_all`), so `play.py print ...` dies constructing
+      the systems (found 2026-07-07 while smoke-testing the factory; predates
+      the `inputsystem-unify` work)
 
 ## Soak test stall — root cause found and fixed (2026-07-06)
 
