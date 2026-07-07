@@ -102,7 +102,7 @@ class DanoWhackAMole(BaseStateMachineGame):
         tower = self._towers[tower_enum]
         tower.set_color(self._tower_color_high[tower_enum])
         tower.play_sound("squeal1", volume=MASTER_VOLUME)
-        logger.info(f"Mole popped at {tower_enum.name}!")
+        logger.info("Mole popped at %s!", tower_enum.name)
 
     def do_playing(self, delta_secs) -> ShouldStop:
         """Handle the playing state."""
@@ -113,9 +113,9 @@ class DanoWhackAMole(BaseStateMachineGame):
                 if tower_enum not in self._available_towers:
                     tower.set_color(self._tower_color_low[tower_enum])
                     self._available_towers.add(tower_enum)
-                    logger.info(f"Whacked mole at {tower_enum.name}!")
+                    logger.info("Whacked mole at %s!", tower_enum.name)
                 else:
-                    logger.info(f"Whack failed at {tower_enum.name}!")
+                    logger.info("Whack failed at %s!", tower_enum.name)
                     self.lost_game()
 
         if self._elapsed_time_secs >= self._time_between_moles_popping_up_sec:
