@@ -1,40 +1,35 @@
 # Illuminatrix TODO
 
-Last groomed: 2026-07-06, during serial soak testing on the `serial-response-framing` branch.
+Last groomed: 2026-07-06, after the soak-test stall was root-caused and the DMX
+controller rewritten on the `dmx-rewrite` branch.
 
-## In flight — uncommitted work on `serial-response-framing`
+## In flight
 
-- [ ] Commit the generic response framing pass (Arduino `bytePos` response builder +
-      Python `extract_latest_response` returning `tuple[int, ...]`) — keeping this
-- [ ] Commit the `flash.sh` SKETCH path fix (was pointing at the old
-      `~/Projects/from_illuminatrix_box` checkout)
-- [ ] Commit the soak-test instrumentation in `play.py`: faulthandler on SIGUSR1,
-      frame-stall warnings with per-phase timing, repeatable `--debug LOGGER` flag
-- [ ] Commit or fold in the stomp-pad experiment changes: `processed_color_cycle()`,
-      clamp-overflow logging, `which_light` selection
-- [ ] Decide what to do with untracked `arduino/ppwwdd.sh` (path-echo stub — keep or delete?)
+- [ ] Soak test the DMX rewrite: the stall root cause is fixed in code but needs a
+      long run to confirm (stall WARNINGs and the 5-minute "DMX health" INFO lines
+      are the signal; `kill -USR1` for a live stack dump if anything wedges)
 - [ ] Replace the dummy stomp-pad color-cycle data in `SwitchInputSystem.update()`
       with real game-driven RGB (marked `TODO` in the code)
 
-## In flight — soak test stall investigation
+## Soak test stall — root cause found and fixed (2026-07-06)
 
-Symptom: runs for a while, then multi-minute pauses with no serial send/receive and
-nothing in the journal. Send logs stopping with no serial ERRORs means the frame loop
-itself stalls, not the serial code.
+Symptom was multi-minute pauses with no serial I/O. SIGUSR1 stack dump caught the
+loop blocked in a socket `send()` to olad inside `SendDmx`. OLA's client is async:
+every send gets a response that must be consumed by the wrapper's event loop, which
+the old example-code controller never ran — unread responses filled the socket
+buffers until olad stopped servicing the connection and the blocking send wedged
+the whole loop (worsening over the soak: 48s → 102s → 116s).
 
-- [ ] During the next pause: `kill -USR1 $(pgrep -f play.py)` and read the stack dump
-      in the journal (or `py-spy dump --pid <pid>`)
-- [ ] Check the new frame-stall WARNINGs — they name the slowest phase after a stall ends
-- [ ] Rule out journald rate limiting (look for "Suppressed N messages"; if LEDs keep
-      animating during a "quiet" period, it's only log suppression)
-- [ ] Correlate pause timestamps with `journalctl -k` (USB/ttyACM resets) and
-      `journalctl -u olad` (daemon restarts)
-- [ ] Prime suspect: `DmxController.SendDmx` is a synchronous socket write to olad from
-      inside the frame loop — a wedged olad blocks everything, serial included
+Fixed by rewriting `DmxController` from the ground up (`dmx-rewrite` branch): DMX
+worker thread owns all I/O, main loop writes to a latest-wins channel buffer and can
+never block on DMX; every response is consumed by the wrapper's Run() loop; socket
+has real timeouts; ack-watchdog + rate-limited reconnect like the serial path.
+Original example code preserved at `experiments/dmx_reference/dmx_controller.py`.
 
 ## Branches to land
 
-- [ ] `serial-response-framing` (3 commits + the uncommitted work above) → into `festival-prep`
+- [ ] `dmx-rewrite` (stacked on `serial-response-framing`) → after soak validation
+- [ ] `serial-response-framing` (framing + soak instrumentation + TODO rewrite) → into `festival-prep`
 - [ ] `festival-prep` (5 commits: color-cycle experiment, monotonic clock, serial
       hardening + review fixes, sound_banks gitignore) → into `main`
 - [ ] Delete `git-commit-from-critical-nw-added-to-todo` once this file lands (its only
@@ -46,10 +41,9 @@ itself stalls, not the serial code.
 
 1. [ ] Logging overhaul: `dictConfig` + `--log-level` with per-module overrides, convert
        ~38 `print()`s to logging (the new `--debug` flag is a first step)
-2. [ ] OLA `DmxController` fixes: `AddEvent` accumulates unbounded (wrapper `Run()` is
-       never called — the queued events never fire and never free); hourly olad restart
-       crashes the program when the 3×0.3s retry window is outlasted — make it
-       reconnect-and-carry-on like the serial path. Also a stall suspect, see above.
+2. [x] OLA `DmxController` fixes — rewritten from scratch 2026-07-06 on `dmx-rewrite`
+       (threaded, self-healing, responses always consumed; fixes the AddEvent leak,
+       the olad-restart crash, and the soak stall). Pending soak validation.
 3. [ ] Game-loop exception boundary + systemd `Restart=always`
 4. [ ] `JackSound.mix_into` bug: `fade_out_index` advances per channel, so multi-tower
        sounds fade N× too fast
