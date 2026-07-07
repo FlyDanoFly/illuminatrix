@@ -7,8 +7,14 @@ from constants.constants import ColorType, LightPos, TowerEnum
 
 from .dmx_controller import DmxController
 from .fixture import Fixture
+from .stomp_pad_controller import StompPadController
 
 logger = logging.getLogger(__name__)
+
+TOWER_POSITIONS = LightPos.Tower_top | LightPos.Tower_bottom
+# The stomp pads have one physical RGB each today, so Pad_top and
+# Pad_bottom address the same LED until the hardware distinguishes them
+PAD_POSITIONS = LightPos.Pad_top | LightPos.Pad_bottom
 
 
 class DmxLightSystem(LightSystem):
@@ -21,8 +27,12 @@ class DmxLightSystem(LightSystem):
 
     def __init__(
             self,
+            stomp_pad_controller: StompPadController | None = None,
             **kwargs,
         ):
+        # Borrowed from the input system (same serial link carries pad
+        # colors down and switch states up); its lifecycle lives there
+        self._stomp_pads = stomp_pad_controller
         self.dmx_controller: DmxController = DmxController(**kwargs)
         self.fixtures: dict[TowerEnum, list[Fixture]] = {
                 tower_enum: [
@@ -79,7 +89,9 @@ class DmxLightSystem(LightSystem):
             int(color[1] * 255),
             int(color[2] * 255),
         )
-        if self.colors[tower_enum] != vamped_color:
+        if light_pos & TOWER_POSITIONS and self.colors[tower_enum] != vamped_color:
             self.colors[tower_enum] = vamped_color
             for fixture in self.fixtures[tower_enum]:
                 fixture.set_colour(vamped_color)
+        if light_pos & PAD_POSITIONS and self._stomp_pads is not None:
+            self._stomp_pads.set_pad_color(tower_enum, vamped_color)

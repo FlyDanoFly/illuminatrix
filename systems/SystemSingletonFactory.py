@@ -39,14 +39,20 @@ class SystemSingletonFactory:
         self.mode: Environment = mode
         self.context: dict = context or {}
 
+        input_system = SystemSingletonFactory.INPUT_SYSTEM_MAP[self.mode]
+        self._input_system = input_system(**self.context["input_system"])
+
+        # The pad LEDs ride the same serial link as the switches, so the
+        # light system borrows the input system's controller; the input
+        # system owns its lifecycle
+        light_kwargs = dict(self.context["light_system"])
+        if isinstance(self._input_system, SwitchInputSystem):
+            light_kwargs["stomp_pad_controller"] = self._input_system.stomp_pads
         light_system = SystemSingletonFactory.LIGHT_SYSTEM_MAP[self.mode]
-        self._light_system = light_system(**self.context["light_system"])
+        self._light_system = light_system(**light_kwargs)
 
         sound_system = SystemSingletonFactory.SOUND_SYSTEM_MAP[self.mode]
         self._sound_system = sound_system(**self.context["sound_system"])
-
-        input_system = SystemSingletonFactory.INPUT_SYSTEM_MAP[self.mode]
-        self._input_system = input_system(**self.context["input_system"])
 
     def get_light_system(self) -> LightSystem:
         return self._light_system

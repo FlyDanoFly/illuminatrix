@@ -8,8 +8,14 @@ controller rewritten on the `dmx-rewrite` branch.
 - [ ] Soak test the DMX rewrite: the stall root cause is fixed in code but needs a
       long run to confirm (stall WARNINGs and the 5-minute "DMX health" INFO lines
       are the signal; `kill -USR1` for a live stack dump if anything wedges)
-- [ ] Replace the dummy stomp-pad color-cycle data in `SwitchInputSystem.update()`
-      with real game-driven RGB (marked `TODO` in the code)
+- [x] Replace the dummy stomp-pad color-cycle data in `SwitchInputSystem.update()`
+      with real game-driven RGB — done on the `stomp-pad-controller` branch: the
+      serial link is now `StompPadController` (light sink + input source),
+      `SwitchInputSystem` is a facade over it, and `DmxLightSystem` routes
+      `LightPos.Pad_*` to it (pads mirror tower color by default since games set
+      `LightPos.All`). Needs a hardware check: pads should follow tower colors
+- [ ] Decide whether `LightPos.Pad_top`/`Pad_bottom` stay merged (one physical
+      RGB per pad today) or the hardware grows a second addressable LED
 
 ## Soak test stall — root cause found and fixed (2026-07-06)
 

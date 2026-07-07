@@ -15,14 +15,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import serial as pyserial  # noqa: E402
 
-import systems.concrete.SwitchInputSystem as sis_mod  # noqa: E402
+import systems.concrete.stomp_pad_controller as spc_mod  # noqa: E402
 from constants.constants import ControllerSwitchEnum, TowerEnum  # noqa: E402
-from systems.concrete.SwitchInputSystem import (  # noqa: E402
+from systems.concrete.stomp_pad_controller import (  # noqa: E402
     SERIAL_FRAME_START_BYTE,
     build_frame,
     compute_crc8,
     extract_latest_response,
 )
+from systems.concrete.SwitchInputSystem import SwitchInputSystem  # noqa: E402
 
 DT = 0.033  # one 30fps frame
 
@@ -40,6 +41,7 @@ class FakeSerial:
     def __init__(self):
         self.rx = bytearray()
         self.write_count = 0
+        self.last_written = b""
         self.fail_next_write = False
 
     @property
@@ -60,6 +62,7 @@ class FakeSerial:
             self.fail_next_write = False
             raise pyserial.SerialException("simulated cable yank")
         self.write_count += 1
+        self.last_written = bytes(frame)
 
     def reset_input_buffer(self):
         self.rx.clear()
@@ -68,21 +71,21 @@ class FakeSerial:
         pass
 
 
-def make_system() -> tuple[sis_mod.SwitchInputSystem, FakeSerial]:
-    """A connected system with a fresh fake port. Patches only this module's
-    view of pyserial; /dev/null satisfies the os.path.exists gate."""
+def make_system() -> tuple[SwitchInputSystem, FakeSerial]:
+    """A connected system with a fresh fake port. Patches only the controller
+    module's view of pyserial; /dev/null satisfies the os.path.exists gate."""
     fake = FakeSerial()
-    sis_mod.serial = types.SimpleNamespace(
+    spc_mod.serial = types.SimpleNamespace(
         Serial=lambda *a, **k: fake,
         SerialException=pyserial.SerialException,
     )
-    system = sis_mod.SwitchInputSystem(serial_port="/dev/null")
+    system = SwitchInputSystem(serial_port="/dev/null")
     system.startup()
-    assert system._serial is fake
+    assert system.stomp_pads._serial is fake
     return system, fake
 
 
-def make_settled_system() -> tuple[sis_mod.SwitchInputSystem, FakeSerial]:
+def make_settled_system() -> tuple[SwitchInputSystem, FakeSerial]:
     """A system past first contact: baseline all-released state established,
     so the startup press-suppression rule is out of the way."""
     system, fake = make_system()
@@ -224,7 +227,7 @@ def test_stale_clear_is_transition_free_and_recovery_suppressed():
     fake.feed(framed(0b1, 0))
     system.update(DT)
     # Prolonged outage: no data past the stale threshold
-    system._last_valid_response_secs = time.monotonic() - (sis_mod.SERIAL_STALE_STATE_SECS + 1)
+    system.stomp_pads._last_valid_response_secs = time.monotonic() - (spc_mod.SERIAL_STALE_STATE_SECS + 1)
     system.update(DT)
     assert not system.is_tower_switch_pressed(TowerEnum.Tower_1), "stale state cleared"
     assert not system.did_tower_switch_transition_up(TowerEnum.Tower_1), "clear fires no transitions"
@@ -247,14 +250,14 @@ def test_io_error_reconnects_rate_limited():
     fake.rx.extend(b"\xaa\x01")  # leftover partial garbage from dying link
     fake.fail_next_write = True
     system.update(DT)
-    assert system._serial is None, "disconnected after I/O error"
-    assert not system._rx_buffer, "software rx buffer cleared on disconnect"
+    assert system.stomp_pads._serial is None, "disconnected after I/O error"
+    assert not system.stomp_pads._rx_buffer, "software rx buffer cleared on disconnect"
     system.update(DT)
-    assert system._serial is None, "reconnect is rate-limited"
-    system._last_connect_attempt_secs = time.monotonic() - (sis_mod.SERIAL_RECONNECT_INTERVAL_SECS + 1)
+    assert system.stomp_pads._serial is None, "reconnect is rate-limited"
+    system.stomp_pads._last_connect_attempt_secs = time.monotonic() - (spc_mod.SERIAL_RECONNECT_INTERVAL_SECS + 1)
     fake.rx.clear()
     system.update(DT)  # reconnects and sends a request
-    assert system._serial is fake
+    assert system.stomp_pads._serial is fake
     fake.feed(framed(0b10, 0))
     system.update(DT)
     assert system.is_tower_switch_pressed(TowerEnum.Tower_2)
@@ -264,15 +267,43 @@ def test_rx_buffer_capped_under_babble():
     system, fake = make_settled_system()
     fake.feed(b"\x55" * 500)
     system.update(DT)
-    assert len(system._rx_buffer) <= 16 * sis_mod.RESPONSE_FRAME_SIZE
+    assert len(system.stomp_pads._rx_buffer) <= 16 * spc_mod.RESPONSE_FRAME_SIZE
 
 
 def test_missing_port_degrades_gracefully():
-    system = sis_mod.SwitchInputSystem(serial_port="/dev/definitely_not_a_port")
+    system = SwitchInputSystem(serial_port="/dev/definitely_not_a_port")
     system.startup()
-    assert system._serial is None
+    assert system.stomp_pads._serial is None
     system.update(DT)  # must not raise
     assert not system.is_tower_switch_pressed(TowerEnum.Tower_1)
+
+
+# ---------------------------------------------------------------------------
+# Pad colors and control LEDs (light sink side of the link)
+
+def test_pad_colors_default_to_black():
+    system, fake = make_settled_system()
+    assert fake.last_written[1:22] == bytes(21)
+
+
+def test_pad_color_rides_the_next_request_frame():
+    system, fake = make_settled_system()
+    system.stomp_pads.set_pad_color(TowerEnum.Tower_1, (255, 0, 7))
+    system.stomp_pads.set_pad_color(TowerEnum.Tower_7, (1, 2, 3))
+    system.update(DT)
+    frame = fake.last_written
+    assert frame[1:4] == bytes([255, 0, 7]), "Tower_1 RGB leads the payload"
+    assert frame[19:22] == bytes([1, 2, 3]), "Tower_7 RGB ends the pad block"
+    assert frame[25] == compute_crc8(frame[1:25]), "CRC covers the new colors"
+
+
+def test_control_led_rides_the_next_request_frame():
+    system, fake = make_settled_system()
+    system.stomp_pads.set_control_led(ControllerSwitchEnum.START, 200)
+    system.update(DT)
+    frame = fake.last_written
+    start_index = 22 + (ControllerSwitchEnum.START.value - 1)
+    assert frame[start_index] == 200
 
 
 if __name__ == "__main__":
