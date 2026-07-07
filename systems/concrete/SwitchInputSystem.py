@@ -89,10 +89,9 @@ def extract_latest_response(buffer: bytearray) -> tuple[int, ...] | None:
 
 class SwitchInputSystem(InputSystem):
     def __init__(self, serial_port: str = SERIAL_PORT, baudrate: int = SERIAL_BAUDRATE, **_):
+        super().__init__(**_)
         self._port: str = serial_port
         self._baudrate: int = baudrate
-        self._prev_switch_state: dict[TowerEnum | ControllerSwitchEnum, bool] = {}
-        self._switch_state: dict[TowerEnum | ControllerSwitchEnum, bool] = {}
         self._serial: serial.Serial | None = None
         self._rx_buffer: bytearray = bytearray()
         self._last_connect_attempt_secs: float = float("-inf")
@@ -177,14 +176,12 @@ class SwitchInputSystem(InputSystem):
             self._switch_state = {}
             self._state_was_cleared = True
         else:
-            # Hold the last known state. Explicit copy: update() aliased
-            # prev and current to the same dict, and equal-but-distinct
-            # objects keep a future in-place mutation from corrupting both
+            # Hold the last known state. Explicit copy: aliasing prev and
+            # current to one dict would let a future in-place mutation
+            # corrupt both
             self._switch_state = dict(self._prev_switch_state)
 
-    def update(self, delta_secs: float) -> None:
-        self._prev_switch_state = self._switch_state
-
+    def _read_switches(self, delta_secs: float) -> None:
         if self._serial is None:
             self._try_connect()
             if self._serial is None:
@@ -241,36 +238,3 @@ class SwitchInputSystem(InputSystem):
 
     def render(self) -> None:
         return super().render()
-
-    def is_switch_pressed(self, switch: TowerEnum | ControllerSwitchEnum) -> bool:
-        return self._switch_state.get(switch, False)
-
-    def did_switch_transition_down(self, switch: TowerEnum | ControllerSwitchEnum) -> bool:
-        return (
-            not self._prev_switch_state.get(switch, False)
-            and self._switch_state.get(switch, False)
-        )
-
-    def did_switch_transition_up(self, switch: TowerEnum | ControllerSwitchEnum) -> bool:
-        return (
-            self._prev_switch_state.get(switch, False)
-            and not self._switch_state.get(switch, False)
-        )
-
-    def is_tower_switch_pressed(self, tower_enum: TowerEnum) -> bool:
-        return self.is_switch_pressed(tower_enum)
-
-    def did_tower_switch_transition_down(self, tower_enum: TowerEnum) -> bool:
-        return self.did_switch_transition_down(tower_enum)
-
-    def did_tower_switch_transition_up(self, tower_enum: TowerEnum) -> bool:
-        return self.did_switch_transition_up(tower_enum)
-
-    def is_controller_switch_pressed(self, controller_switch_enum: ControllerSwitchEnum) -> bool:
-        return self.is_switch_pressed(controller_switch_enum)
-
-    def did_controller_switch_transition_down(self, controller_switch_enum: ControllerSwitchEnum) -> bool:
-        return self.did_switch_transition_down(controller_switch_enum)
-
-    def did_controller_switch_transition_up(self, controller_switch_enum: ControllerSwitchEnum) -> bool:
-        return self.did_switch_transition_up(controller_switch_enum)
