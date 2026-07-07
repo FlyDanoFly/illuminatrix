@@ -1,4 +1,3 @@
-import os
 import logging
 
 
@@ -8,7 +7,7 @@ class Fixture:
     def __init__(self, **kwargs):
         """Set up the particular fixture"""
         self.dmx_id = kwargs['id']
-        logging.debug(f'instantiating fixture {self.dmx_id}')
+        logging.debug('instantiating fixture %s', self.dmx_id)
         self.dmx_controller = kwargs['controller']
         self.rgb = [0, 0, 0]
 

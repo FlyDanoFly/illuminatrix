@@ -1,18 +1,17 @@
 """An asynchronous client for the Simulation."""
 from __future__ import annotations
 
-from collections.abc import Sequence
-from enum import Enum
 import json
 import logging
+import ssl
+from collections.abc import Sequence
+from enum import Enum
 from pathlib import Path
 from urllib.parse import urlunparse
 
-import ssl
 from websockets.client import connect
 
 from constants import IlluminatrixClientError, TowerLight
-
 
 logger = logging.getLogger(__file__)
 

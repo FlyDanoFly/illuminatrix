@@ -3,8 +3,7 @@ import random
 
 from bases import BaseGame
 from components.TowerController import TowerController
-from constants.colors import DULL_RAINBOW, RAINBOW
-from constants.constants import TowerEnum
+from constants.colors import DULL_RAINBOW
 
 logger = logging.getLogger(__name__)
 

@@ -18,7 +18,7 @@ class Music(BaseGame):
         self.towers = list(x for x in self._towers.values())
         self.towers_that_are_on = list()
         self.dull_rainbow = list(list(x) for x in DULL_RAINBOW)
-        self.rbg_for_each_tower = dict(zip(range(len(self.towers)), self.dull_rainbow))
+        self.rbg_for_each_tower = dict(zip(range(len(self.towers)), self.dull_rainbow, strict=False))
 
     def first_frame_update(self) -> None:
         for idx, tower in enumerate(self._towers.values()):
