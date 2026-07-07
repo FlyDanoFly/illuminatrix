@@ -1,19 +1,14 @@
 """A synchronous DMX client for the "Simulation"."""
 from __future__ import annotations
 
-from collections.abc import Sequence
-from enum import Enum
 import json
 import logging
-from pathlib import Path
-from urllib.parse import urlunparse
-
+from collections.abc import Sequence
 
 from constants import IlluminatrixClientError, TowerLight
 
 from .dmx_controller import DmxController
 from .fixture import Fixture
-
 
 logger = logging.getLogger(__file__)
 
@@ -82,7 +77,7 @@ class SynchronousDmxClient:
         green = how much green [0.0-1.0]
         blue = how much blue [0.0-1.0]
         """
-        raise NotImplemented()
+        raise NotImplementedError()
         if not towers:
             return
         if isinstance(towers, TowerLight):

@@ -1,18 +1,17 @@
 """A synchronous client for the Simulation."""
 from __future__ import annotations
 
-from collections.abc import Sequence
-from enum import Enum
 import json
 import logging
+import ssl
+from collections.abc import Sequence
+from enum import Enum
 from pathlib import Path
 from urllib.parse import urlunparse
 
-import ssl
 from websockets.sync.client import connect
 
 from constants import IlluminatrixClientError, TowerLight
-
 
 logger = logging.getLogger(__file__)
 
@@ -122,7 +121,7 @@ class SynchronousClient:
                 raise IlluminatrixClientError()
             tower_dict[tower.value] = color
         self.websocket.send(json.dumps(message))
-        msg = self.websocket.recv()
+        self.websocket.recv()
 
     def set_color(self, towers: list | TowerLight, red: float, green: float, blue: float):
         """

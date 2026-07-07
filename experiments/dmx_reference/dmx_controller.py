@@ -1,12 +1,11 @@
 # import os
+import array
 import logging
 import threading
 import time
-import array
 
 from ola.ClientWrapper import ClientWrapper
 from ola.OlaClient import OLADNotRunningException
-
 
 DEFAULT_WIDTH = 10
 NUM_DMX_RETRIES = 3

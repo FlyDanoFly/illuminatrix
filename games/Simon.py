@@ -138,7 +138,7 @@ class Simon(BaseStateMachineGame):
 
                 tower.play_sound(f"simon_sequence_sound_{tower_enum.value}")
                 if tower_enum == self._current_sequence_item:
-                    right = True
+                    right = True  # noqa: F841
                 else:
                     # Wrong tower pressed, reset the sequence
                     print("Wrong tower pressed, resetting sequence")
