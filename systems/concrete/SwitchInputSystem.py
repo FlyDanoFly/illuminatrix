@@ -6,6 +6,7 @@ import serial
 
 from bases.InputSystem import InputSystem
 from constants.constants import ControllerSwitchEnum, TowerEnum
+from experiments.stomp_pad_color_cycle import processed_color_cycle
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,12 @@ SERIAL_FRAME_START_BYTE = 0xAA
 
 SERIAL_PORT = "/dev/ttyACM0"
 SERIAL_BAUDRATE = 115200
-SERIAL_TIMEOUT_SECS = 0.1
+# Reads are non-blocking (we only consume in_waiting bytes); writes can
+# block only if the OS buffers fill because the device stopped draining —
+# the timeout turns that into a SerialException and the reconnect path
+SERIAL_WRITE_TIMEOUT_SECS = 0.1
+# Response frame: start byte + tower switches + control switches + CRC8
+RESPONSE_FRAME_SIZE = 4
 # Minimum time between attempts to (re)open the serial port
 SERIAL_RECONNECT_INTERVAL_SECS = 1.0
 # After this long without a valid response, report all switches released
@@ -54,6 +60,33 @@ def build_frame(rgb_data: list[int], control_leds: list[int]) -> bytes:
     return bytes([SERIAL_FRAME_START_BYTE]) + data + bytes([crc])
 
 
+def extract_latest_response(buffer: bytearray) -> tuple[int, ...] | None:
+    """Consume every complete, CRC-valid response frame in the buffer and
+    return the newest (tower_switches, control_switches), or None if no
+    complete valid frame is present yet.
+
+    Garbage and corrupt frames are discarded byte-by-byte (a false start
+    byte fails CRC and resyncs); an incomplete frame at the tail is left
+    in place for a later read to finish.
+    """
+    latest: tuple[int, ...] | None = None
+    while True:
+        start = buffer.find(SERIAL_FRAME_START_BYTE)
+        if start == -1:
+            buffer.clear()
+            return latest
+        if start:
+            del buffer[:start]
+        if len(buffer) < RESPONSE_FRAME_SIZE:
+            return latest
+        payload = bytes(buffer[1:RESPONSE_FRAME_SIZE-1])
+        if compute_crc8(payload) == buffer[RESPONSE_FRAME_SIZE-1]:
+            latest = tuple(payload[:RESPONSE_FRAME_SIZE-1])
+            del buffer[:RESPONSE_FRAME_SIZE]
+        else:
+            del buffer[:1]
+
+
 class SwitchInputSystem(InputSystem):
     def __init__(self, serial_port: str = SERIAL_PORT, baudrate: int = SERIAL_BAUDRATE, **_):
         self._port: str = serial_port
@@ -61,6 +94,7 @@ class SwitchInputSystem(InputSystem):
         self._prev_switch_state: dict[TowerEnum | ControllerSwitchEnum, bool] = {}
         self._switch_state: dict[TowerEnum | ControllerSwitchEnum, bool] = {}
         self._serial: serial.Serial | None = None
+        self._rx_buffer: bytearray = bytearray()
         self._last_connect_attempt_secs: float = float("-inf")
         self._last_valid_response_secs: float = float("-inf")
         self._last_disconnected_log_secs: float = float("-inf")
@@ -90,8 +124,14 @@ class SwitchInputSystem(InputSystem):
             logger.debug("Serial port %s not present", self._port)
             return
         try:
-            self._serial = serial.Serial(self._port, self._baudrate, timeout=SERIAL_TIMEOUT_SECS)
+            self._serial = serial.Serial(
+                self._port,
+                self._baudrate,
+                timeout=0,  # non-blocking reads; we only consume in_waiting bytes
+                write_timeout=SERIAL_WRITE_TIMEOUT_SECS,
+            )
             self._serial.reset_input_buffer()
+            self._rx_buffer.clear()
             # Reset so a future outage logs immediately again
             self._last_disconnected_log_secs = float("-inf")
             logger.info("Serial connection to %s established", self._port)
@@ -112,6 +152,7 @@ class SwitchInputSystem(InputSystem):
         )
 
     def _disconnect(self) -> None:
+        self._rx_buffer.clear()
         if self._serial is None:
             return
         try:
@@ -152,34 +193,39 @@ class SwitchInputSystem(InputSystem):
                 return
 
         # TODO: dummy stomp pad data to get the switch states
-        rgb_data = [0,0,0] * 7
+        rgb_data = processed_color_cycle()
+        # rgb_data = [0,0,0] * 7
         control_leds = [0,0,0]
-        frame = build_frame(rgb_data, control_leds)
+        request = build_frame(rgb_data, control_leds)
         try:
-            self._serial.write(frame)
-            response = self._serial.read(2)
-            if len(response) != 2:
-                # Discard any partial remnant so a later read(2) can't
-                # span two responses. No flush on the happy path: a device
-                # whose latency exceeds the read timeout then still works
-                # one frame late instead of having every reply discarded.
-                # (A response start byte + CRC would fix this properly.)
-                self._serial.reset_input_buffer()
+            # Non-blocking: consume whatever has arrived (normally last
+            # frame's response — measured round trip is 4-11ms, well inside
+            # a 33ms frame), then send this frame's request. The loop never
+            # waits on the wire, so a silent device costs nothing.
+            if self._serial.in_waiting:
+                self._rx_buffer.extend(self._serial.read(self._serial.in_waiting))
+            logger.debug("recv %s", self._rx_buffer.hex())
+            logger.debug("send %s", request.hex())
+            self._serial.write(request)
         except (serial.SerialException, OSError) as e:
             logger.error("Serial I/O to %s failed, reconnecting: %s", self._port, e)
             self._disconnect()
             self._handle_missed_response()
             return
 
-        if len(response) != 2:
-            logger.debug("Short serial response (%d bytes), keeping previous switch state", len(response))
+        if len(self._rx_buffer) > 16 * RESPONSE_FRAME_SIZE:
+            # A babbling device must not grow the buffer without bound
+            del self._rx_buffer[:-RESPONSE_FRAME_SIZE]
+
+        payload = extract_latest_response(self._rx_buffer)
+        if payload is None:
+            logger.debug("No valid switch response this frame, keeping previous switch state")
             self._handle_missed_response()
             return
 
         self._last_valid_response_secs = time.monotonic()
         new_state: dict[TowerEnum | ControllerSwitchEnum, bool] = {}
-        tower_switches = response[0]
-        control_switches = response[1]
+        tower_switches, control_switches, *_ = payload
         for tower_enum, bitmask in TOWER_TO_BITMASK.items():
             if tower_switches & bitmask:
                 new_state[tower_enum] = True

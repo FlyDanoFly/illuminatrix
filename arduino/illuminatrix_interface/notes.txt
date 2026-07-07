@@ -1,0 +1,54 @@
+
+To install the arduino-softpwm, which promises faster speeds and smaller footprints than the one in the official library system
+
+Here's the "official" SoftPWM
+
+https://github.com/bhagman/SoftPWM
+```
+$ arduino lib search SoftPWM
+Name: "SoftPWM"
+  Author: Brett Hagman <bhagman@wiring.org.co>
+  Maintainer: Brett Hagman <bhagman@wiring.org.co>
+  Sentence: A software library to produce a 50 percent duty cycle PWM signal on arbitrary pins.<br />
+...
+```
+
+Here's the one that I'm trying
+https://github.com/Palatis/arduino-softpwm
+Forum post declaring its existance:
+https://forum.arduino.cc/t/a-really-fast-software-pwm-library/119206
+
+You can't just install it, the default arduino-cli defaults to third-party libraries as unsafe, so first need to turn that off.
+> arduino-cli config set library.enable_unsafe_install true
+
+then
+> arduino-cli lib install --git-url https://github.com/Palatis/arduino-softpwm
+
+now we'll try it :cross-fingers:
+
+It works **wonderfully**. Subjectively I think it looks nicer than the other library, smoother and softer.
+
+Other useful links
+Mega2560
+Manafacturer info found here:
+https://www.microchip.com/en-us/product/ATmega2560
+Data sheet:
+https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ProductDocuments/DataSheets/ATmega640-1280-1281-2560-2561-Datasheet-DS40002211A.pdf
+
+This is really helpful, the Mega2560 CPU to Anduino Mega board mapping
+https://community.element14.com/resized-image/__size/650x773/__key/communityserver-wikis-components-files/00-00-00-02-65/5732.contentimage_5F00_112869.png
+Here's the page with several Mega resources
+https://community.element14.com/products/arduino/w/documents/2969/arduino-mega-2560-rev3-pinout-atmega2560-pin-mapping-eagle-files-schematics-and-more
+
+
+Doing a better search for higher res images
+This forum post has a high res image of the CPU pins -> Arduino pin mapping in higher res than the above
+https://forum.arduino.cc/t/smd-multypin-microcontroller-suggestion-for-a-project/416692/2
+This forum post has a high res image of the Ultimate Arduino Mega pinout diagram
+https://europe1.discourse-cdn.com/arduino/original/4X/3/6/8/368f6a73141b26b82227ae7794cc6920d402a618.png
+
+(Note: I'll put all these files in the project itself, as well as a copy of the super-cool library that works)
+
+
+I'll keep the downloaded file around, as well as the link to the github library
+illuminatrix/arduino/libraries/arduino-softpwm-master.zip
