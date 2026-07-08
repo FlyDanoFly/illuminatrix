@@ -57,14 +57,14 @@ class SystemSingletonFactory:
 
         input_kwargs = dict(self.context["input_system"])
         input_system = SystemSingletonFactory.INPUT_SYSTEM_MAP[self.mode]
-        if input_system is SwitchInputSystem:
+        if issubclass(input_system, SwitchInputSystem):
             serial_controller = SerialController(**input_kwargs.pop("serial_controller", {}))
             input_kwargs["serial_controller"] = serial_controller
         self._input_system = input_system(**input_kwargs)
 
         light_kwargs = dict(self.context["light_system"])
         light_system = SystemSingletonFactory.LIGHT_SYSTEM_MAP[self.mode]
-        if light_system is EmbeddedLightSystem:
+        if issubclass(light_system, EmbeddedLightSystem):
             light_kwargs["dmx_controller"] = DmxController(**light_kwargs.pop("dmx_controller", {}))
             light_kwargs["serial_controller"] = serial_controller
         self._light_system = light_system(**light_kwargs)
@@ -74,7 +74,7 @@ class SystemSingletonFactory:
         # Popped unconditionally: the mixer config is JACK transport
         # detail, meaningless to an overridden (e.g. --no-sound) system
         mixer_config = sound_kwargs.pop("mixer", {})
-        if sound_system is JackSoundSystem:
+        if issubclass(sound_system, JackSoundSystem):
             sound_kwargs["mixer"] = JackMixer(**mixer_config)
         self._sound_system = sound_system(**sound_kwargs)
 

@@ -165,7 +165,9 @@ class JackSound(Sound):
         self.loops: int = num_loops
         # TODO: if I get into adding reltime effects, make this an effect
         self.fade_out_active: bool = False
-        self.fade_out_complete: bool = False
+        # A zero-length sound (empty/corrupt file) is born finished —
+        # otherwise mix_into's wrap loop could spin forever on it
+        self.fade_out_complete: bool = len(self.data) == 0
         self.fade_out_curve = numpy.linspace(1.0, 1.0, 1, dtype=numpy.float32)
         self.fade_out_index = 0
 
@@ -183,8 +185,17 @@ class JackSound(Sound):
         return self.position >= len(self.data)
 
     def start_fade_out(self, duration_sec: float) -> None:
+        if self.fade_out_complete:
+            return
+        # Restarting mid-fade begins the new curve at the current
+        # amplitude, not full volume — a reset to full is an audible pop
+        # (e.g. a game's 0.25s stop_all overlapped by shutdown's 1s one)
+        if self.fade_out_active:
+            start_amplitude = self.fade_out_curve[min(self.fade_out_index, len(self.fade_out_curve) - 1)]
+        else:
+            start_amplitude = self.volume
         total_frames = int(duration_sec * self.samplerate)
-        self.fade_out_curve = numpy.linspace(self.volume, 0.0, total_frames, dtype=numpy.float32)
+        self.fade_out_curve = numpy.linspace(start_amplitude, 0.0, total_frames, dtype=numpy.float32)
         self.fade_out_index = 0
         self.fade_out_active = True
 
@@ -193,6 +204,9 @@ class JackSound(Sound):
         self.fade_out_active = False
         self.fade_out_complete = True
         self.position = len(self.data)
+        # A looping sound must not wrap in the one mix_into that can run
+        # between stop() and the mixer pruning it
+        self.loops = 0
 
     def mix_into(self, output_buffers: list[numpy.ndarray], channel_map: list[TowerEnum]) -> None:
         """Mix this sound's next block into every mapped channel.
@@ -215,6 +229,10 @@ class JackSound(Sound):
                 self.loops -= 1
                 self.position = 0
                 remaining = len(self.data)
+                if remaining == 0:
+                    # Zero-length data can never fill the block; without
+                    # this the wrap loop spins forever on the JACK thread
+                    break
             take = min(frames - filled, remaining)
             segments.append(self.data[self.position:self.position + take])
             self.position += take
@@ -234,7 +252,10 @@ class JackSound(Sound):
             if self.fade_out_index >= len(self.fade_out_curve) or fade_len <= 0:
                 self.fade_out_active = False
                 self.fade_out_complete = True
-        else:
+        elif self.volume != 1.0:
+            # At unity volume block stays a read-only view of self.data —
+            # skipping the multiply avoids a per-callback array allocation
+            # on the JACK realtime thread
             block = block * self.volume
 
         for target_channel in (tower_enum.value - 1 for tower_enum in channel_map):
@@ -348,6 +369,12 @@ class JackMixer:
                 outport = typing.cast("jack.OwnPort", client.outports.register(f"out_{i}"))
                 client.connect(outport, system_port)
                 ports.append(outport)
+            if not ports:
+                # A server with no playback hardware (interface unplugged,
+                # dummy backend) must count as disconnected: mix_into on an
+                # empty buffer list would raise on the JACK thread, and a
+                # "connected" state would never retry when hardware appears
+                raise jack.JackError("no physical playback ports found")
         except jack.JackError as e:
             logger.debug("JACK connect attempt failed: %s", e)
             if client is not None:
@@ -402,8 +429,11 @@ class JackMixer:
         self._teardown_client()
         logger.info("Mixer shut down cleanly.")
 
-    def play(self, sound: Sound, channel_map: list[TowerEnum] | TowerEnum | None = None):
-        """Play a sound on the mixer.
+    def play(self, sound: Sound, channel_map: list[TowerEnum] | TowerEnum | None = None) -> bool:
+        """Play a sound on the mixer. Returns True if the sound was
+        enqueued, False if it was dropped (JACK disconnected) — callers
+        must not hand a dropped Sound to game code, because a sound the
+        mixer never advances reports is_done() False forever.
 
         Args:
             sound (Sound): The sound to play.
@@ -413,13 +443,14 @@ class JackMixer:
             raise RuntimeError("Mixer must be started to play sounds")
         if self.state != MixerState.STARTED:
             logger.warning("JACK not connected, dropping sound")
-            return
+            return False
         if channel_map is None or self.force_play_on_all_channels:
             channel_map = list(TowerEnum)
         if not isinstance(channel_map, list):
             channel_map = [channel_map]
         with self.lock:
             self.active_sounds.append((sound, channel_map))
+        return True
 
     def stop_all(self, fade_secs: float = 0.5):
         with self.lock:
@@ -491,10 +522,11 @@ class JackSoundSystem(SoundSystem):
 
     def load_sound_bank(self, path: str) -> None:
         """Switch the current sound bank, loading and caching it on first
-        use. Startup preloads every configured bank, so mid-show calls
-        should be cache hits — a load here means the preload list in
-        constants.py is missing this bank, and it stalls the game loop
-        (the ambient bank measured 4.3s)."""
+        use. play.py preloads every bank the run's games declare, so
+        mid-show calls should be cache hits — a load here means a
+        SOUND_BANK declaration drifted from this ask (or a non-game
+        component grew a bank play.py doesn't know about), and it stalls
+        the game loop (the ambient bank measured 4.3s)."""
         self.sound_bank = self._load_bank_cached(path)
 
     def _load_bank_cached(self, path: str) -> dict[str, SoundData]:
@@ -528,7 +560,10 @@ class JackSoundSystem(SoundSystem):
         play_on_tower_enums: list[TowerEnum] = tower_enums or list(TowerEnum)
         sound_data = self.sound_bank[sound]
         snd = sound_data.create_sound(volume=volume, num_loops=num_loops)
-        self.mixer.play(snd, play_on_tower_enums)
+        if not self.mixer.play(snd, play_on_tower_enums):
+            # Dropped (JACK disconnected): games gating on is_done() must
+            # get None, not a Sound that will never finish
+            return None
         return snd
 
     def stop_all(self, fade_secs: float = 0.25):

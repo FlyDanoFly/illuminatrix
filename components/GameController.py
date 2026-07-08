@@ -19,7 +19,7 @@ from utils.utils import cycle
 # If no input is received in this time frame, the game is cancelled
 GAME_CONTROLLER_GAME_IDLE_TIMEOUT_SECS = 5 * 60
 # If no input is received in this time frame, go into ambient mode
-GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS = 3 # 2 * 60
+GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS = 2 * 60
 
 
 class GameController(StateMachineMixin, StateMachine):

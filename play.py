@@ -130,9 +130,9 @@ def main():
     tower_controller.set_color((1.0, 1.0, 1.0))
 
     # Uncomment to see all the logger names available to --debug
-    logger_dict = logging.Logger.manager.loggerDict
-    for name in logger_dict:
-        print("-->", name)
+    # logger_dict = logging.Logger.manager.loggerDict
+    # for name in logger_dict:
+    #     print("-->", name)
 
     # Start the systems
     for system in active_systems:
@@ -140,6 +140,12 @@ def main():
 
     for manager in active_managers:
         manager.startup()
+
+    # The serial controller needs a moment after startup before real
+    # traffic; the bank preload below takes seconds anyway, so it counts
+    # toward the warmup and only the shortfall is slept
+    SERIAL_WARMUP_SECS = 2.0
+    warmup_start_secs = time.monotonic()
 
     # Preload every sound bank this run's games declare (plus the game
     # controller's own selection sounds), so entering a game switches
@@ -153,8 +159,10 @@ def main():
     sound_banks.add(GameController.INTRO_SOUND_BANK)
     systems.get_sound_system().preload_sound_banks(sorted(sound_banks))
 
-    print("Sleep 2 to warmup to wait for the serial system to init")
-    time.sleep(2)
+    warmup_remaining_secs = SERIAL_WARMUP_SECS - (time.monotonic() - warmup_start_secs)
+    if warmup_remaining_secs > 0:
+        print(f"Sleeping {warmup_remaining_secs:.1f}s to finish the serial warmup")
+        time.sleep(warmup_remaining_secs)
 
     game_controller = GameController(
         systems,

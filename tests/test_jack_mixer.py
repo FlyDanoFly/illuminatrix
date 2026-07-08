@@ -165,6 +165,45 @@ def test_server_death_drops_sounds_and_reconnects():
     assert len(fake.clients) > 1, "a fresh client was created"
 
 
+def test_zero_physical_ports_counts_as_disconnected():
+    # Regression: a JACK server with no playback hardware used to report
+    # STARTED with zero outports — IndexError in the process callback and
+    # no retry when the hardware appeared
+    mixer, fake = make_mixer(physical_ports=0)
+    mixer.startup()
+    assert mixer.state == MixerState.DISCONNECTED
+    fake.physical_ports = 7  # audio interface enumerates
+    bypass_rate_limit(mixer)
+    mixer.update()
+    assert mixer.state == MixerState.STARTED, "retries until hardware appears"
+    assert len(mixer.outports) == 7
+
+
+def test_dropped_play_reports_false_and_sound_system_returns_none():
+    # Regression: a Sound the mixer dropped while DISCONNECTED was still
+    # returned to games, whose is_done() gates then wedged forever
+    import numpy
+
+    from systems.concrete.JackSoundSystem import JackSoundSystem, SoundData, SoundType
+    mixer, fake = make_mixer()
+    fake.server_present = False
+    mixer.startup()
+    assert mixer.play(make_sound(), [TowerEnum.Tower_1]) is False
+
+    system = JackSoundSystem(mixer=mixer)
+    system.sound_bank = {"boom": SoundData(
+        key="boom", filename="boom.wav", sound_type=SoundType.SOUND,
+        data=numpy.ones(10, dtype=numpy.float32), samplerate=1000,
+    )}
+    assert system.play("boom") is None, "dropped sounds must not reach game gates"
+
+    fake.server_present = True
+    bypass_rate_limit(mixer)
+    mixer.update()
+    snd = system.play("boom")
+    assert snd is not None and mixer.play(make_sound(), [TowerEnum.Tower_1]) is True
+
+
 def test_shutdown_is_safe_from_any_state_and_idempotent():
     mixer, fake = make_mixer()
     fake.server_present = False

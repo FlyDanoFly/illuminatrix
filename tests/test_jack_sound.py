@@ -122,6 +122,42 @@ def test_stop_is_immediately_done_and_mixes_silence():
     assert not bufs[0].any(), "a stopped sound contributes nothing"
 
 
+def test_zero_length_sound_is_born_done_and_mixes_nothing():
+    # Regression: an empty/corrupt file played as a loop used to spin
+    # mix_into's wrap loop forever on the JACK realtime thread
+    snd = make_sound(n_samples=0, num_loops=-1)
+    assert snd.is_done(), "a zero-length sound is finished before it starts"
+    bufs = make_buffers()
+    snd.mix_into(bufs, [TowerEnum.Tower_1])  # must return, not hang
+    assert not bufs[0].any()
+
+
+def test_stop_on_looping_sound_mixes_silence():
+    # Regression: stop() on a num_loops=-1 sound used to re-wrap in the
+    # one mix_into before pruning and emit a full-amplitude sample (click)
+    snd = make_sound(num_loops=-1)
+    snd.mix_into(make_buffers(), [TowerEnum.Tower_1])
+    snd.stop()
+    assert snd.is_done()
+    bufs = make_buffers()
+    snd.mix_into(bufs, [TowerEnum.Tower_1])
+    assert not bufs[0].any(), "a stopped looping sound contributes nothing"
+
+
+def test_fade_restart_continues_from_current_amplitude():
+    # Regression: retriggering start_fade_out used to rebuild the curve
+    # from full volume — an audible pop when two stop_alls overlap
+    snd = make_sound()
+    snd.start_fade_out(0.1)  # 100-frame curve from 1.0
+    snd.mix_into(make_buffers(frames=50), [TowerEnum.Tower_1])
+    mid_amplitude = snd.fade_out_curve[50]  # ~0.5
+    snd.start_fade_out(0.1)
+    bufs = make_buffers(frames=50)
+    snd.mix_into(bufs, [TowerEnum.Tower_1])
+    assert abs(bufs[0][0] - mid_amplitude) < 0.02, \
+        "restarted fade begins near the current amplitude, not full volume"
+
+
 def test_towers_beyond_output_count_are_skipped():
     # Stereo fallback: 2 physical ports, sound mapped to all 7 towers
     snd = make_sound()
