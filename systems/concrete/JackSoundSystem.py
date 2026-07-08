@@ -105,7 +105,12 @@ def load_sound_bank(directory: str) -> dict[str, SoundData]:
                         sound_info['type'] = 'sound'
 
                 # TODO: add support for other sound types, for now load everything as 'sound'
+                file_start_secs = time.perf_counter()
                 data, samplerate = load_sound_file(full_path)
+                logger.debug(
+                    "Loaded %s (%.1fs of audio) in %.2fs",
+                    full_path, len(data) / samplerate, time.perf_counter() - file_start_secs,
+                )
                 sound_bank[name] = SoundData(
                     key=name,
                     filename=filename,
@@ -161,23 +166,14 @@ class JackSound(Sound):
         self.loops: int = num_loops
         # TODO: if I get into adding reltime effects, make this an effect
         self.fade_out_active: bool = False
-        self.fade_out_frames_remaining: int = 0
-        self.fade_out_step: float = 0.0
-        self.fade_out_comelete: bool = False
+        self.fade_out_complete: bool = False
         self.fade_out_curve = numpy.linspace(1.0, 1.0, 1, dtype=numpy.float32)
         self.fade_out_index = 0
 
-    def __del__(self):
-        """Ensure resources are cleaned up."""
-        logger.debug("Sound object is being deleted, cleaning up resources.")
-        if hasattr(self, 'data'):
-            del self.data
-        if hasattr(self, 'fade_out_curve'):
-            del self.fade_out_curve
-
     def is_done(self) -> bool:
-        logger.debug("%r %r %r %r", self.loops > 0, self.fade_out_comelete, self.fade_out_active, self.position >= len(self.data))
-        if self.fade_out_comelete:
+        # Called from the JACK process callback: keep it allocation- and
+        # logging-free
+        if self.fade_out_complete:
             return True
         if self.fade_out_active:
             return False
@@ -194,38 +190,41 @@ class JackSound(Sound):
     def stop(self) -> None:
         """Stop the sound immediately, without fading out."""
         self.fade_out_active = False
-        self.fade_out_comelete = True
+        self.fade_out_complete = True
         self.position = len(self.data)
 
     def mix_into(self, output_buffers: list[numpy.ndarray], channel_map: list[TowerEnum]) -> None:
+        """Mix this sound's next block into every mapped channel.
+
+        The block (and its fade-curve segment) is computed once and added
+        identically to each channel; per-sound state advances once per
+        callback, no matter how many towers the sound plays on.
+        """
         frames = len(output_buffers[0])
         position = self.position
-        for target_channel in [x.value - 1 for x in channel_map]:
+        remaining = len(self.data) - position
+        block_len = min(frames, remaining)
+        samples = self.data[position:position + block_len]
+
+        if self.fade_out_active or self.fade_out_complete:
+            fade_remaining = len(self.fade_out_curve) - self.fade_out_index
+            fade_len = min(block_len, fade_remaining)
+            samples = samples[:fade_len] * self.fade_out_curve[self.fade_out_index:self.fade_out_index + fade_len]
+            self.fade_out_index += fade_len
+            if self.fade_out_index >= len(self.fade_out_curve) or fade_len <= 0:
+                self.fade_out_active = False
+                self.fade_out_complete = True
+            advance = fade_len
+        else:
+            samples = samples * self.volume
+            advance = block_len
+
+        for target_channel in (tower_enum.value - 1 for tower_enum in channel_map):
             if target_channel >= len(output_buffers):
                 continue
-            buf = output_buffers[target_channel]
-            position = self.position
-            remaining = len(self.data) - position
-            block_len = min(frames, remaining)
+            output_buffers[target_channel][:advance] += samples
 
-            samples = self.data[position:position+block_len]
-
-            if self.fade_out_active or self.fade_out_comelete:
-                fade_remaining = len(self.fade_out_curve) - self.fade_out_index
-                fade_len = min(block_len, fade_remaining)
-                fade_values = self.fade_out_curve[self.fade_out_index:self.fade_out_index+fade_len]
-                samples = samples[:fade_len] * fade_values
-                self.fade_out_index += fade_len
-                if self.fade_out_index >= len(self.fade_out_curve) or fade_len <= 0:
-                    self.fade_out_active = False
-                    self.fade_out_comelete = True
-
-                buf[:fade_len] += samples
-                position += fade_len
-            else:
-                buf[:block_len] += samples * self.volume
-                position += block_len
-
+        position += advance
         if position >= len(self.data) and self.loops != 0:
             self.loops -= 1
             position = 0
@@ -255,17 +254,17 @@ class JackMixer:
 
     def process(self, _: int):
         # the parameter is the number of frames to process
-        if self.state != MixerState.STARTED:
-            return
-
-        # Create empty output buffers
-
         output_buffers = [
             numpy.frombuffer(port.get_buffer(), dtype=numpy.float32)
             for port in self.outports
         ]
+        # Zero before the state check so the shutdown window plays
+        # silence instead of repeating the last rendered buffer
         for buf in output_buffers:
             buf[:] = 0.0
+
+        if self.state != MixerState.STARTED:
+            return
 
         with self.lock:
             still_playing = []
@@ -325,31 +324,43 @@ class JackMixer:
         with self.lock:
             self.active_sounds.append((sound, channel_map))
 
-    def stop_all(self, fade_duration=0.5):
+    def stop_all(self, fade_secs: float = 0.5):
         with self.lock:
             for sound, _ in self.active_sounds:
-                sound.start_fade_out(fade_duration)
+                sound.start_fade_out(fade_secs)
 
     def is_anything_playing(self):
         return bool(self.active_sounds)
+
+
+SHUTDOWN_FADE_SECS = 1.0
+# Bound the shutdown fade wait: if the JACK server died mid-run the
+# process callback never runs, sounds never finish, and an unbounded
+# wait would hang the whole shutdown
+SHUTDOWN_FADE_GRACE_SECS = 1.0
 
 
 class JackSoundSystem(SoundSystem):
     def __init__(self):
         super().__init__()
         self.mixer = JackMixer()
+        self.sound_bank: dict[str, SoundData] = {}
 
     def startup(self) -> None:
         """Start the JACK mixer."""
         self.mixer.startup()
 
     def shutdown(self) -> None:
-        """Shutdown the JACK mixer."""
-        self.mixer.stop_all(fade_duration=1.0)
-        # time.sleep(1.2)
-        while self.mixer.is_anything_playing():
-            logger.info("   fading %.3f", self.mixer.client.cpu_load())
+        """Fade everything out, then shut down the JACK mixer."""
+        self.mixer.stop_all(fade_secs=SHUTDOWN_FADE_SECS)
+        deadline = time.monotonic() + SHUTDOWN_FADE_SECS + SHUTDOWN_FADE_GRACE_SECS
+        while self.mixer.is_anything_playing() and time.monotonic() < deadline:
             time.sleep(0.05)
+        if self.mixer.is_anything_playing():
+            logger.warning(
+                "Sounds still playing %.1fs after the shutdown fade began, shutting down anyway",
+                SHUTDOWN_FADE_SECS + SHUTDOWN_FADE_GRACE_SECS,
+            )
         self.mixer.shutdown()
 
     def update(self, delta_secs: float) -> None:
@@ -366,22 +377,30 @@ class JackSoundSystem(SoundSystem):
         pass
 
     def load_sound_bank(self, path: str) -> None:
-        """Load a sound bank from the specified directory."""
+        """Load a sound bank from the specified directory, replacing the
+        current bank. Synchronous and potentially slow (decodes every
+        file to float32 in memory) — the timing log tells you how slow."""
         logger.info("Loading sound bank from %s", path)
+        start_secs = time.perf_counter()
         self.sound_bank = load_sound_bank(path)
+        elapsed_secs = time.perf_counter() - start_secs
+        audio_secs = sum(len(sd.data) / sd.samplerate for sd in self.sound_bank.values())
+        logger.info(
+            "Loaded sound bank %s: %d sounds, %.1fs of audio, in %.2fs",
+            path, len(self.sound_bank), audio_secs, elapsed_secs,
+        )
 
     def play(
             self,
             sound: str,
             tower_enums: list[TowerEnum] | None = None,
             volume: float = 1.0,
-            num_loops: int = 0) -> Sound:
+            num_loops: int = 0) -> Sound | None:
         """Play a sound from the sound bank."""
         if sound not in self.sound_bank:
             logger.warning("Sound %s not found in sound bank", sound)
-            return
+            return None
         play_on_tower_enums: list[TowerEnum] = tower_enums or list(TowerEnum)
-        # ids = [1]
         sound_data = self.sound_bank[sound]
         snd = sound_data.create_sound(volume=volume, num_loops=num_loops)
         self.mixer.play(snd, play_on_tower_enums)
@@ -423,7 +442,7 @@ def main():
         # frame objects, see the description in the type hierarchy or see the
         # attribute descriptions in the inspect module).
         logger.info("\nSignal received, shutting down...")
-        mixer.stop_all(fade_duration=1.0)
+        mixer.stop_all(fade_secs=1.0)
         # time.sleep(1.2)
         while mixer.is_anything_playing():
             logger.info("   fading %.3f", mixer.client.cpu_load())

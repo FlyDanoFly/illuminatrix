@@ -30,8 +30,8 @@ class SoundSystem(BaseSystem):
         pass
 
     @abstractmethod
-    def play(self, sound: str, tower_enums: list[TowerEnum] | None = None, volume: float = 1.0, num_loops: int = 0) -> Sound:
-        pass
+    def play(self, sound: str, tower_enums: list[TowerEnum] | None = None, volume: float = 1.0, num_loops: int = 0) -> Sound | None:
+        """Play a sound from the loaded bank; None if the sound is unknown."""
 
     @abstractmethod
     def stop_all(self, fade_secs: float = 0.25):

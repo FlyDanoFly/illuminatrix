@@ -94,8 +94,7 @@ class TowerController:
         self._sound_system.load_sound_bank(sound_bank)
 
     def play_sound(self, sound, volume: float = 1.0, num_loops: int = 0) -> None:
-        # TODO: change to a log
-        print(f"Playing sound: {sound}")
+        logger.info("Playing sound: %s", sound)
         self._sound_system.play(sound, volume=volume, num_loops=num_loops)
 
     def fade_out(self, fade_secs: float = 0.25):

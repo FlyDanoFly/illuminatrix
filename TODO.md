@@ -19,11 +19,15 @@ pads were verified on hardware.
       mapping (a mismatch looks like wrong pad colors)
 - [ ] Decide whether `LightPos.Pad_top`/`Pad_bottom` stay merged (one physical
       RGB per pad today) or the hardware grows a second addressable LED
-- [ ] Fix or drop the PRINT environment: `PrintSoundSystem` is missing three
-      abstract method implementations (`are_any_sounds_playing`,
-      `load_sound_bank`, `stop_all`), so `play.py print ...` dies constructing
-      the systems (found 2026-07-07 while smoke-testing the factory; predates
-      the `inputsystem-unify` work)
+- [x] Fix or drop the PRINT environment — fixed 2026-07-07 on
+      `sound-system-review`: `PrintSound`/`PrintSoundSystem` implement the full
+      abstract contract and the factory constructs all three PRINT systems
+- [ ] Sound bank loading is synchronous inside the game loop and now logged
+      with timing (INFO "Loaded sound bank ..."): ambient is 213MB and
+      story_time 947MB on disk, decoded to float32 mono in RAM, and ColorCycle
+      reloads the ambient bank on every 2-minute idle timeout. Measure on
+      hardware, then decide: cache banks by path, lazy-load per sound, or
+      stream (see backlog "Add streaming")
 - [ ] **Deploy note: firmware and Pi code must ship together** — mismatched framing
       halves mean all switches read released
 
@@ -57,8 +61,9 @@ hash lives under Reference below). The firmware/Pi deploy note moved to In fligh
        (threaded, self-healing, responses always consumed; fixes the AddEvent leak,
        the olad-restart crash, and the soak stall). Pending soak validation.
 3. [ ] Game-loop exception boundary + systemd `Restart=always`
-4. [ ] `JackSound.mix_into` bug: `fade_out_index` advances per channel, so multi-tower
-       sounds fade N× too fast
+4. [x] `JackSound.mix_into` bug — fixed 2026-07-07 on `sound-system-review`: the
+       block and fade segment are computed once per callback and mixed identically
+       into every mapped channel, with regression tests (`tests/test_jack_sound.py`)
 5. [ ] Cleanup pass: `delta_ms`/`delta_secs` naming in GameController, CWD-dependent
        paths, add a type checker, grow the pytest suite for pure logic (input-system,
        serial-protocol, and DMX suites landed 2026-07 — 48 tests), festival
