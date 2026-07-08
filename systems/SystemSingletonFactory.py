@@ -10,6 +10,7 @@ from systems.concrete.KeyboardInputSystem import KeyboardInputSystem
 from systems.concrete.PrintInputSystem import PrintInputSystem
 from systems.concrete.PrintLightSystem import PrintLightSystem
 from systems.concrete.PrintSoundSystem import PrintSoundSystem
+from systems.concrete.serial_controller import SerialController
 from systems.concrete.SwitchInputSystem import SwitchInputSystem
 from systems.concrete.WebSimulationLightSystem import WebSimulationLightSystem
 
@@ -41,21 +42,25 @@ class SystemSingletonFactory:
         self.mode: Environment = mode
         self.context: dict = context or {}
 
-        input_system = SystemSingletonFactory.INPUT_SYSTEM_MAP[self.mode]
-        self._input_system = input_system(**self.context["input_system"])
+        # The embedded controllers are constructed here, not by the
+        # systems, each from its config dict in the context. The serial
+        # controller is one instance serving two systems (the same link
+        # carries pad colors down and switch states up); its lifecycle is
+        # refcounted, so every holder runs startup/shutdown independently
+        serial_controller: SerialController | None = None
 
-        # The embedded light system's controllers are constructed here,
-        # not by the class: the DMX controller from its config dict in the
-        # context, and the serial controller shared with the input system
-        # (same link carries pad colors down and switch states up; its
-        # start/stop are refcounted, so each system runs the lifecycle
-        # independently)
+        input_kwargs = dict(self.context["input_system"])
+        input_system = SystemSingletonFactory.INPUT_SYSTEM_MAP[self.mode]
+        if input_system is SwitchInputSystem:
+            serial_controller = SerialController(**input_kwargs.pop("serial_controller", {}))
+            input_kwargs["serial_controller"] = serial_controller
+        self._input_system = input_system(**input_kwargs)
+
         light_kwargs = dict(self.context["light_system"])
         light_system = SystemSingletonFactory.LIGHT_SYSTEM_MAP[self.mode]
         if light_system is EmbeddedLightSystem:
             light_kwargs["dmx_controller"] = DmxController(**light_kwargs.pop("dmx_controller", {}))
-        if isinstance(self._input_system, SwitchInputSystem):
-            light_kwargs["serial_controller"] = self._input_system.serial_controller
+            light_kwargs["serial_controller"] = serial_controller
         self._light_system = light_system(**light_kwargs)
 
         sound_system = SystemSingletonFactory.SOUND_SYSTEM_MAP[self.mode]
@@ -67,8 +72,8 @@ class SystemSingletonFactory:
         # response, so the input system reading pressed_switches later
         # this frame sees this frame's exchange
         self._active_systems = []
-        if isinstance(self._input_system, SwitchInputSystem):
-            self._active_systems.append(self._input_system.serial_controller)
+        if serial_controller is not None:
+            self._active_systems.append(serial_controller)
         self._active_systems += [
             self._light_system,
             self._sound_system,

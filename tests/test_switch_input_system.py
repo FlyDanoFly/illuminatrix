@@ -94,7 +94,7 @@ def tick(system: SwitchInputSystem, delta_secs: float = DT) -> None:
 def make_system() -> tuple[SwitchInputSystem, FakeSerial]:
     """A connected system on a fresh fake port."""
     fake = patch_serial()
-    system = SwitchInputSystem(serial_port="/dev/null")
+    system = SwitchInputSystem(serial_controller=SerialController(serial_port="/dev/null"))
     system.startup()
     assert system.serial_controller._serial is fake
     return system, fake
@@ -286,7 +286,7 @@ def test_rx_buffer_capped_under_babble():
 
 
 def test_missing_port_degrades_gracefully():
-    system = SwitchInputSystem(serial_port="/dev/definitely_not_a_port")
+    system = SwitchInputSystem(serial_controller=SerialController(serial_port="/dev/definitely_not_a_port"))
     system.startup()
     assert system.serial_controller._serial is None
     tick(system)  # must not raise

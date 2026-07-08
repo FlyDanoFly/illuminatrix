@@ -8,30 +8,21 @@ and never fire phantom transitions at either edge of an outage.
 """
 
 from bases.InputSystem import InputSystem, SwitchKey
-from systems.concrete.serial_controller import (
-    SERIAL_BAUDRATE,
-    SERIAL_PORT,
-    SerialController,
-)
+from systems.concrete.serial_controller import SerialController
 
 
 class SwitchInputSystem(InputSystem):
-    def __init__(
-            self,
-            serial_port: str = SERIAL_PORT,
-            baudrate: int = SERIAL_BAUDRATE,
-            serial_controller: SerialController | None = None,
-            **_,
-        ):
+    def __init__(self, serial_controller: SerialController, **_):
         super().__init__(**_)
-        self._serial_controller = serial_controller or SerialController(serial_port, baudrate)
+        self._serial_controller = serial_controller
         self._state_was_cleared: bool = False
 
     @property
     def serial_controller(self) -> SerialController:
-        """The serial link, shared with the light system (it sets pad
-        colors through it) and updated by the game loop. Its lifecycle is
-        refcounted, so each participant runs it independently."""
+        """The serial link, constructed by the factory and shared with
+        the light system (it sets pad colors through it) and the game
+        loop (which updates it). Its lifecycle is refcounted, so each
+        participant runs it independently."""
         return self._serial_controller
 
     def startup(self) -> None:

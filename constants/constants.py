@@ -53,9 +53,10 @@ ENVIRONMENT_CONTEXT = {
         },
         "sound_system": {},
         "input_system": {
-            # Defaults live in SwitchInputSystem; override here if the
-            # controller enumerates elsewhere, e.g.:
-            # "serial_port": "/dev/ttyACM1",
+            # SerialController config; defaults live in serial_controller.py.
+            # Override here if the controller enumerates elsewhere, e.g.:
+            # "serial_controller": {"serial_port": "/dev/ttyACM1"},
+            "serial_controller": {},
         },
         "effect_system": {},
     },
