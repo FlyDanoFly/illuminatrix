@@ -6,4 +6,4 @@ class StoryTimeDogsVsAliens(StoryTimeBase):
     PROXY = False
 
     STORY_SPEC_CSV: str = "sound_banks/story_time/dogs_vs_aliens/Story mode_ Stories - Example_ Dog vs Aliens.csv"
-    STORY_SOUND_BANK: str = "sound_banks/story_time/dogs_vs_aliens"
+    SOUND_BANK: str = "sound_banks/story_time/dogs_vs_aliens"

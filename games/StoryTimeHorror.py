@@ -6,4 +6,4 @@ class StoryTimeHorror(StoryTimeBase):
     PROXY = False
 
     STORY_SPEC_CSV: str = "sound_banks/story_time/gremoryland/Story mode_ Stories - GremoryLand (Sonya - in progress).csv"
-    STORY_SOUND_BANK: str = "sound_banks/story_time/gremoryland"
+    SOUND_BANK: str = "sound_banks/story_time/gremoryland"

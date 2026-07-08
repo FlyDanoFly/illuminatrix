@@ -17,6 +17,8 @@ MOLES_FAIL_FADE_SEC = 2.5
 
 
 class DanoWhackAMole(BaseStateMachineGame):
+    SOUND_BANK = "sound_banks/dano_whack_a_mole_1"
+
     # Game states
     start = State("Start", initial=True)
     introduction = State('Introduction')
@@ -33,7 +35,7 @@ class DanoWhackAMole(BaseStateMachineGame):
         super().__init__(tower_controller)
 
         self._towers = tower_controller
-        self._towers.load_sound_bank("sound_banks/dano_whack_a_mole_1/")
+        self._towers.load_sound_bank(self.SOUND_BANK)
 
         self._available_towers = set(tower_controller)
 

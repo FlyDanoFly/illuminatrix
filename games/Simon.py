@@ -23,6 +23,8 @@ SIMON_LEVEL_UP_FACTOR_MINIMUM = 0.05
 random.seed()
 
 class Simon(BaseStateMachineGame):
+    SOUND_BANK = "sound_banks/simon"
+
     # Game states
     start = State("Start", initial=True)
     introduction = State("Introduction")
@@ -46,7 +48,7 @@ class Simon(BaseStateMachineGame):
         super().__init__()
 
         self._towers = tower_controller
-        self._towers.load_sound_bank("sound_banks/simon")
+        self._towers.load_sound_bank(self.SOUND_BANK)
 
         self._tower_color_low = dict(zip(tower_controller, DULL_RAINBOW, strict=True))
         self._tower_color_high = dict(zip(tower_controller, RAINBOW, strict=True))

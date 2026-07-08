@@ -29,6 +29,10 @@ class SoundSystem(BaseSystem):
         """Load a sound bank from the specified path."""
         pass
 
+    def preload_sound_banks(self, paths: list[str]) -> None:
+        """Optimization hook: warm these banks ahead of time so later
+        load_sound_bank calls don't stall. Default: do nothing."""
+
     @abstractmethod
     def play(self, sound: str, tower_enums: list[TowerEnum] | None = None, volume: float = 1.0, num_loops: int = 0) -> Sound | None:
         """Play a sound from the loaded bank; None if the sound is unknown."""

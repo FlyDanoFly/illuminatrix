@@ -36,6 +36,10 @@ class GameController(StateMachineMixin, StateMachine):
     While the game is going, only the reset butten is active. If it is pressed
     for x time it will stop the current game and go back to await input mode.
     """
+    # The selection/instructions sounds are the controller's own bank,
+    # not any game's; play.py includes it in the boot preload
+    INTRO_SOUND_BANK = "sound_banks/intro_and_instructions"
+
     initial_state = State("initial_state", initial=True)
     await_input = State("await_input")
     instructions = State("instructions")
@@ -96,7 +100,7 @@ class GameController(StateMachineMixin, StateMachine):
         self._towers.set_color(WHITE)
         self._game_cycler = cycle(self._game_classes)
         self._selected_game = self._game_cycler.__next__()
-        self._towers.load_sound_bank("sound_banks/intro_and_instructions")
+        self._towers.load_sound_bank(self.INTRO_SOUND_BANK)
 
     # ------------------------------------------------------------
     # State: await_input

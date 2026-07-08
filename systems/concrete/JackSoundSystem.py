@@ -442,11 +442,30 @@ class JackSoundSystem(SoundSystem):
         super().__init__()
         self.mixer = mixer
         self.sound_bank: dict[str, SoundData] = {}
+        self._bank_cache: dict[str, dict[str, SoundData]] = {}
 
     def startup(self) -> None:
         """Start the JACK mixer (degrades to silence if the server is
         missing; the mixer keeps retrying from update())."""
         self.mixer.startup()
+
+    def preload_sound_banks(self, paths: list[str]) -> None:
+        """Warm the bank cache before the game loop starts — play.py
+        derives the list from the run's games' SOUND_BANK declarations,
+        so a game's own load_sound_bank ask becomes a switch instead of
+        seconds of frozen loop."""
+        start_secs = time.perf_counter()
+        for path in paths:
+            try:
+                self._load_bank_cached(path)
+            except Exception:
+                # A broken bank costs its game's sounds, not the boot;
+                # this ERROR names it while someone is still watching
+                logger.exception("Failed to preload sound bank %s", path)
+        logger.info(
+            "Preloaded %d sound banks in %.1fs",
+            len(self._bank_cache), time.perf_counter() - start_secs,
+        )
 
     def shutdown(self) -> None:
         """Fade everything out, then shut down the JACK mixer."""
@@ -471,18 +490,30 @@ class JackSoundSystem(SoundSystem):
         pass
 
     def load_sound_bank(self, path: str) -> None:
-        """Load a sound bank from the specified directory, replacing the
-        current bank. Synchronous and potentially slow (decodes every
-        file to float32 in memory) — the timing log tells you how slow."""
+        """Switch the current sound bank, loading and caching it on first
+        use. Startup preloads every configured bank, so mid-show calls
+        should be cache hits — a load here means the preload list in
+        constants.py is missing this bank, and it stalls the game loop
+        (the ambient bank measured 4.3s)."""
+        self.sound_bank = self._load_bank_cached(path)
+
+    def _load_bank_cached(self, path: str) -> dict[str, SoundData]:
+        key = path.rstrip("/")
+        cached = self._bank_cache.get(key)
+        if cached is not None:
+            logger.debug("Sound bank %s served from cache", path)
+            return cached
         logger.info("Loading sound bank from %s", path)
         start_secs = time.perf_counter()
-        self.sound_bank = load_sound_bank(path)
+        bank = load_sound_bank(path)
         elapsed_secs = time.perf_counter() - start_secs
-        audio_secs = sum(len(sd.data) / sd.samplerate for sd in self.sound_bank.values())
+        audio_secs = sum(len(sd.data) / sd.samplerate for sd in bank.values())
         logger.info(
             "Loaded sound bank %s: %d sounds, %.1fs of audio, in %.2fs",
-            path, len(self.sound_bank), audio_secs, elapsed_secs,
+            path, len(bank), audio_secs, elapsed_secs,
         )
+        self._bank_cache[key] = bank
+        return bank
 
     def play(
             self,

@@ -28,12 +28,16 @@ pads were verified on hardware.
       (~5 lines/sec instead of ~200), and `NullSoundSystem` works and is
       selected by `play.py --no-sound` (any environment). Possible future
       tier: ANSI 24-bit color blocks as live towers
-- [ ] Sound bank loading is synchronous inside the game loop and now logged
-      with timing (INFO "Loaded sound bank ..."): ambient is 213MB and
-      story_time 947MB on disk, decoded to float32 mono in RAM, and ColorCycle
-      reloads the ambient bank on every 2-minute idle timeout. Measure on
-      hardware, then decide: cache banks by path, lazy-load per sound, or
-      stream (see backlog "Add streaming")
+- [x] Sound bank loading stalls — measured 2026-07-07 on hardware: the ambient
+      bank (919MB decoded) froze the game loop 4.34s on every entry, including
+      each 2-minute idle timeout; all banks total ~1.7GB decoded against the
+      Pi's 8GB. Decision: preload at boot + path-keyed cache (done on
+      `sound-system-review`). Each game declares `SOUND_BANK` and asks for it
+      via `load_sound_bank(self.SOUND_BANK)`; play.py derives the preload set
+      from the run's games plus `GameController.INTRO_SOUND_BANK`, so a
+      single-game dev run preloads only what it needs. Streaming shelved
+      unless the game grows or the hardware slims; an unexpected "Loading
+      sound bank" INFO mid-show means a game's declaration and its ask drifted
 - [ ] Make `ColorCycle` runnable from the command line: it's extracted from the
       selectable games as the ambient game before selection happens, so
       `play.py print --allgames ColorCycle` says "No games selected" — surprising

@@ -130,9 +130,9 @@ def main():
     tower_controller.set_color((1.0, 1.0, 1.0))
 
     # Uncomment to see all the logger names available to --debug
-    # logger_dict = logging.Logger.manager.loggerDict
-    # for name in logger_dict:
-    #     print("-->", name)
+    logger_dict = logging.Logger.manager.loggerDict
+    for name in logger_dict:
+        print("-->", name)
 
     # Start the systems
     for system in active_systems:
@@ -140,6 +140,18 @@ def main():
 
     for manager in active_managers:
         manager.startup()
+
+    # Preload every sound bank this run's games declare (plus the game
+    # controller's own selection sounds), so entering a game switches
+    # banks from cache instead of stalling the loop on a multi-second
+    # decode — the ambient bank measured 4.3s
+    sound_banks = {
+        game.SOUND_BANK
+        for game in [*games_to_play, ambient_game]
+        if game.SOUND_BANK
+    }
+    sound_banks.add(GameController.INTRO_SOUND_BANK)
+    systems.get_sound_system().preload_sound_banks(sorted(sound_banks))
 
     print("Sleep 2 to warmup to wait for the serial system to init")
     time.sleep(2)
