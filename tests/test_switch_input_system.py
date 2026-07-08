@@ -1,4 +1,5 @@
-"""Tests for SwitchInputSystem: protocol framing and fault handling.
+"""Tests for the switch/pad serial link: SerialController (framing,
+fault handling, shared lifecycle) and the SwitchInputSystem facade.
 
 Runs two ways, no hardware needed (serial is replaced with a fake):
 
@@ -15,14 +16,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import serial as pyserial  # noqa: E402
 
-import systems.concrete.SwitchInputSystem as sis_mod  # noqa: E402
+import systems.concrete.serial_controller as sc_mod  # noqa: E402
 from constants.constants import ControllerSwitchEnum, TowerEnum  # noqa: E402
-from systems.concrete.SwitchInputSystem import (  # noqa: E402
+from systems.concrete.serial_controller import (  # noqa: E402
     SERIAL_FRAME_START_BYTE,
+    SerialController,
     build_frame,
     compute_crc8,
     extract_latest_response,
 )
+from systems.concrete.SwitchInputSystem import SwitchInputSystem  # noqa: E402
 
 DT = 0.033  # one 30fps frame
 
@@ -40,6 +43,7 @@ class FakeSerial:
     def __init__(self):
         self.rx = bytearray()
         self.write_count = 0
+        self.last_written = b""
         self.fail_next_write = False
 
     @property
@@ -60,6 +64,7 @@ class FakeSerial:
             self.fail_next_write = False
             raise pyserial.SerialException("simulated cable yank")
         self.write_count += 1
+        self.last_written = bytes(frame)
 
     def reset_input_buffer(self):
         self.rx.clear()
@@ -68,27 +73,40 @@ class FakeSerial:
         pass
 
 
-def make_system() -> tuple[sis_mod.SwitchInputSystem, FakeSerial]:
-    """A connected system with a fresh fake port. Patches only this module's
-    view of pyserial; /dev/null satisfies the os.path.exists gate."""
+def patch_serial() -> FakeSerial:
+    """Patch the controller module's view of pyserial with a fresh fake
+    port; /dev/null satisfies the os.path.exists gate."""
     fake = FakeSerial()
-    sis_mod.serial = types.SimpleNamespace(
+    sc_mod.serial = types.SimpleNamespace(
         Serial=lambda *a, **k: fake,
         SerialException=pyserial.SerialException,
     )
-    system = sis_mod.SwitchInputSystem(serial_port="/dev/null")
+    return fake
+
+
+def tick(system: SwitchInputSystem, delta_secs: float = DT) -> None:
+    """One game-loop frame, in loop order: the transport exchanges first,
+    then the input system reads its cached response."""
+    system.serial_controller.update(delta_secs)
+    system.update(delta_secs)
+
+
+def make_system() -> tuple[SwitchInputSystem, FakeSerial]:
+    """A connected system on a fresh fake port."""
+    fake = patch_serial()
+    system = SwitchInputSystem(serial_controller=SerialController(serial_port="/dev/null"))
     system.startup()
-    assert system._serial is fake
+    assert system.serial_controller._serial is fake
     return system, fake
 
 
-def make_settled_system() -> tuple[sis_mod.SwitchInputSystem, FakeSerial]:
+def make_settled_system() -> tuple[SwitchInputSystem, FakeSerial]:
     """A system past first contact: baseline all-released state established,
     so the startup press-suppression rule is out of the way."""
     system, fake = make_system()
-    system.update(DT)  # first request goes out, nothing to read yet
+    tick(system)  # first request goes out, nothing to read yet
     fake.feed(framed(0, 0))
-    system.update(DT)
+    tick(system)
     assert not system.is_tower_switch_pressed(TowerEnum.Tower_1)
     return system, fake
 
@@ -156,9 +174,9 @@ def test_first_contact_suppresses_already_held_switch():
     # A pad already held when the program first hears from the controller
     # (startup, or recovery after an outage) must not register as a press
     system, fake = make_system()
-    system.update(DT)
+    tick(system)
     fake.feed(framed(0b1, 0))
-    system.update(DT)
+    tick(system)
     assert system.is_tower_switch_pressed(TowerEnum.Tower_1)
     assert not system.did_tower_switch_transition_down(TowerEnum.Tower_1)
 
@@ -166,12 +184,12 @@ def test_first_contact_suppresses_already_held_switch():
 def test_press_and_release_transitions():
     system, fake = make_settled_system()
     fake.feed(framed(0b1, 0b001))
-    system.update(DT)
+    tick(system)
     assert system.is_tower_switch_pressed(TowerEnum.Tower_1)
     assert system.did_tower_switch_transition_down(TowerEnum.Tower_1)
     assert system.is_controller_switch_pressed(ControllerSwitchEnum.START)
     fake.feed(framed(0, 0))
-    system.update(DT)
+    tick(system)
     assert system.did_tower_switch_transition_up(TowerEnum.Tower_1)
     assert system.did_controller_switch_transition_up(ControllerSwitchEnum.START)
 
@@ -179,9 +197,9 @@ def test_press_and_release_transitions():
 def test_missed_response_holds_state_and_keeps_requesting():
     system, fake = make_settled_system()
     fake.feed(framed(0b1, 0))
-    system.update(DT)
+    tick(system)
     writes_before = fake.write_count
-    system.update(DT)  # nothing on the wire this frame
+    tick(system)  # nothing on the wire this frame
     assert fake.write_count == writes_before + 1, "requests keep flowing during a miss"
     assert system.is_tower_switch_pressed(TowerEnum.Tower_1), "state held"
     assert not system.did_tower_switch_transition_down(TowerEnum.Tower_1)
@@ -191,11 +209,11 @@ def test_missed_response_holds_state_and_keeps_requesting():
 def test_corrupt_response_holds_state():
     system, fake = make_settled_system()
     fake.feed(framed(0b1, 0))
-    system.update(DT)
+    tick(system)
     bad = bytearray(framed(0, 0))
     bad[3] ^= 0xFF
     fake.feed(bytes(bad))
-    system.update(DT)
+    tick(system)
     assert system.is_tower_switch_pressed(TowerEnum.Tower_1), "corrupt frame must not change state"
 
 
@@ -203,10 +221,10 @@ def test_split_frame_reassembled_across_updates():
     system, fake = make_settled_system()
     resp = framed(0b1, 0)
     fake.feed(resp[:2])
-    system.update(DT)
+    tick(system)
     assert not system.is_tower_switch_pressed(TowerEnum.Tower_1), "not parsed yet"
     fake.feed(resp[2:])
-    system.update(DT)
+    tick(system)
     assert system.is_tower_switch_pressed(TowerEnum.Tower_1)
     assert system.did_tower_switch_transition_down(TowerEnum.Tower_1), "single press event"
 
@@ -214,7 +232,7 @@ def test_split_frame_reassembled_across_updates():
 def test_response_burst_resolves_to_newest():
     system, fake = make_settled_system()
     fake.feed(framed(0b1, 0) + framed(0b10, 0))
-    system.update(DT)
+    tick(system)
     assert system.is_tower_switch_pressed(TowerEnum.Tower_2)
     assert not system.is_tower_switch_pressed(TowerEnum.Tower_1)
 
@@ -222,23 +240,23 @@ def test_response_burst_resolves_to_newest():
 def test_stale_clear_is_transition_free_and_recovery_suppressed():
     system, fake = make_settled_system()
     fake.feed(framed(0b1, 0))
-    system.update(DT)
+    tick(system)
     # Prolonged outage: no data past the stale threshold
-    system._last_valid_response_secs = time.monotonic() - (sis_mod.SERIAL_STALE_STATE_SECS + 1)
-    system.update(DT)
+    system.serial_controller._last_valid_response_secs = time.monotonic() - (sc_mod.SERIAL_STALE_STATE_SECS + 1)
+    tick(system)
     assert not system.is_tower_switch_pressed(TowerEnum.Tower_1), "stale state cleared"
     assert not system.did_tower_switch_transition_up(TowerEnum.Tower_1), "clear fires no transitions"
     # Recovery while the pad is still physically held: no phantom press...
     fake.feed(framed(0b1, 0))
-    system.update(DT)
+    tick(system)
     assert system.is_tower_switch_pressed(TowerEnum.Tower_1)
     assert not system.did_tower_switch_transition_down(TowerEnum.Tower_1)
     # ...but genuine release + press transition normally afterwards
     fake.feed(framed(0, 0))
-    system.update(DT)
+    tick(system)
     assert system.did_tower_switch_transition_up(TowerEnum.Tower_1)
     fake.feed(framed(0b1, 0))
-    system.update(DT)
+    tick(system)
     assert system.did_tower_switch_transition_down(TowerEnum.Tower_1)
 
 
@@ -246,33 +264,94 @@ def test_io_error_reconnects_rate_limited():
     system, fake = make_settled_system()
     fake.rx.extend(b"\xaa\x01")  # leftover partial garbage from dying link
     fake.fail_next_write = True
-    system.update(DT)
-    assert system._serial is None, "disconnected after I/O error"
-    assert not system._rx_buffer, "software rx buffer cleared on disconnect"
-    system.update(DT)
-    assert system._serial is None, "reconnect is rate-limited"
-    system._last_connect_attempt_secs = time.monotonic() - (sis_mod.SERIAL_RECONNECT_INTERVAL_SECS + 1)
+    tick(system)
+    assert system.serial_controller._serial is None, "disconnected after I/O error"
+    assert not system.serial_controller._rx_buffer, "software rx buffer cleared on disconnect"
+    tick(system)
+    assert system.serial_controller._serial is None, "reconnect is rate-limited"
+    system.serial_controller._last_connect_attempt_secs = time.monotonic() - (sc_mod.SERIAL_RECONNECT_INTERVAL_SECS + 1)
     fake.rx.clear()
-    system.update(DT)  # reconnects and sends a request
-    assert system._serial is fake
+    tick(system)  # reconnects and sends a request
+    assert system.serial_controller._serial is fake
     fake.feed(framed(0b10, 0))
-    system.update(DT)
+    tick(system)
     assert system.is_tower_switch_pressed(TowerEnum.Tower_2)
 
 
 def test_rx_buffer_capped_under_babble():
     system, fake = make_settled_system()
     fake.feed(b"\x55" * 500)
-    system.update(DT)
-    assert len(system._rx_buffer) <= 16 * sis_mod.RESPONSE_FRAME_SIZE
+    tick(system)
+    assert len(system.serial_controller._rx_buffer) <= 16 * sc_mod.RESPONSE_FRAME_SIZE
 
 
 def test_missing_port_degrades_gracefully():
-    system = sis_mod.SwitchInputSystem(serial_port="/dev/definitely_not_a_port")
+    system = SwitchInputSystem(serial_controller=SerialController(serial_port="/dev/definitely_not_a_port"))
     system.startup()
-    assert system._serial is None
-    system.update(DT)  # must not raise
+    assert system.serial_controller._serial is None
+    tick(system)  # must not raise
     assert not system.is_tower_switch_pressed(TowerEnum.Tower_1)
+
+
+# ---------------------------------------------------------------------------
+# Shared lifecycle (input and light systems both start/stop the link)
+
+def test_lifecycle_refcounted_across_loop_and_systems():
+    fake = patch_serial()
+    controller = SerialController(serial_port="/dev/null")
+    controller.startup()  # game loop
+    controller.startup()  # input system
+    controller.startup()  # light system
+    assert controller._serial is fake
+    controller.shutdown()  # participants shut down one at a time...
+    controller.shutdown()
+    assert controller._serial is fake, "link stays open for the last participant"
+    controller.shutdown()
+    assert controller._serial is None, "last shutdown closes the port"
+    controller.shutdown()  # an unbalanced extra shutdown must be harmless
+    assert controller._serial is None
+    controller.update(DT)  # a stray update while shut down must not reopen
+    assert controller._serial is None
+
+
+def test_restart_after_full_shutdown_reconnects():
+    fake = patch_serial()
+    controller = SerialController(serial_port="/dev/null")
+    controller.startup()
+    controller.shutdown()
+    # startup() alone may be inside the reconnect rate limit; update()
+    # retries, so step past the limit the way a real outage would
+    controller._last_connect_attempt_secs = time.monotonic() - (sc_mod.SERIAL_RECONNECT_INTERVAL_SECS + 1)
+    controller.startup()
+    assert controller._serial is fake
+
+
+# ---------------------------------------------------------------------------
+# Pad colors and control LEDs (light sink side of the link)
+
+def test_pad_colors_default_to_black():
+    system, fake = make_settled_system()
+    assert fake.last_written[1:22] == bytes(21)
+
+
+def test_pad_color_rides_the_next_request_frame():
+    system, fake = make_settled_system()
+    system.serial_controller.set_pad_color(TowerEnum.Tower_1, (255, 0, 7))
+    system.serial_controller.set_pad_color(TowerEnum.Tower_7, (1, 2, 3))
+    tick(system)
+    frame = fake.last_written
+    assert frame[1:4] == bytes([255, 0, 7]), "Tower_1 RGB leads the payload"
+    assert frame[19:22] == bytes([1, 2, 3]), "Tower_7 RGB ends the pad block"
+    assert frame[25] == compute_crc8(frame[1:25]), "CRC covers the new colors"
+
+
+def test_control_led_rides_the_next_request_frame():
+    system, fake = make_settled_system()
+    system.serial_controller.set_control_led(ControllerSwitchEnum.START, 200)
+    tick(system)
+    frame = fake.last_written
+    start_index = 22 + (ControllerSwitchEnum.START.value - 1)
+    assert frame[start_index] == 200
 
 
 if __name__ == "__main__":

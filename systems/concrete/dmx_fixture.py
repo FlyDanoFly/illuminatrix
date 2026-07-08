@@ -3,7 +3,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class Fixture:
+class DmxFixture:
     """Class for representing a particular DMX fixture"""
 
     def __init__(self, **kwargs):

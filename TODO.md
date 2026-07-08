@@ -8,8 +8,22 @@ controller rewritten on the `dmx-rewrite` branch.
 - [ ] Soak test the DMX rewrite: the stall root cause is fixed in code but needs a
       long run to confirm (stall WARNINGs and the 5-minute "DMX health" INFO lines
       are the signal; `kill -USR1` for a live stack dump if anything wedges)
-- [ ] Replace the dummy stomp-pad color-cycle data in `SwitchInputSystem.update()`
-      with real game-driven RGB (marked `TODO` in the code)
+- [x] Replace the dummy stomp-pad color-cycle data in `SwitchInputSystem.update()`
+      with real game-driven RGB — done on the `inputsystem-unify` branch: the
+      serial link is now `SerialController` (light sink + input source),
+      `SwitchInputSystem` is a facade over it, and `EmbeddedLightSystem` routes
+      `LightPos.Pad_*` to it (pads mirror tower color by default since games set
+      `LightPos.All`). Hardware check passed 2026-07-07: pads follow tower colors
+      through the ColorCycle ambient, including per-tower hues. When all seven
+      lights are wired, run `experiments/pad_tower_map_test.py` to verify the
+      physical tower/pad ↔ enum mapping (a mismatch looks like wrong pad colors)
+- [ ] Decide whether `LightPos.Pad_top`/`Pad_bottom` stay merged (one physical
+      RGB per pad today) or the hardware grows a second addressable LED
+- [ ] Fix or drop the PRINT environment: `PrintSoundSystem` is missing three
+      abstract method implementations (`are_any_sounds_playing`,
+      `load_sound_bank`, `stop_all`), so `play.py print ...` dies constructing
+      the systems (found 2026-07-07 while smoke-testing the factory; predates
+      the `inputsystem-unify` work)
 
 ## Soak test stall — root cause found and fixed (2026-07-06)
 
