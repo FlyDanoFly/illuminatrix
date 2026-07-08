@@ -1,22 +1,22 @@
 # Illuminatrix TODO
 
-Last groomed: 2026-07-06, after the soak-test stall was root-caused and the DMX
-controller rewritten on the `dmx-rewrite` branch.
+Last groomed: 2026-07-07, after `inputsystem-unify` merged (PR #28): the serial
+transport is a loop-driven system, the factory owns controller construction, and
+pads were verified on hardware.
 
 ## In flight
 
 - [ ] Soak test the DMX rewrite: the stall root cause is fixed in code but needs a
       long run to confirm (stall WARNINGs and the 5-minute "DMX health" INFO lines
-      are the signal; `kill -USR1` for a live stack dump if anything wedges)
-- [x] Replace the dummy stomp-pad color-cycle data in `SwitchInputSystem.update()`
-      with real game-driven RGB — done on the `inputsystem-unify` branch: the
-      serial link is now `SerialController` (light sink + input source),
-      `SwitchInputSystem` is a facade over it, and `EmbeddedLightSystem` routes
-      `LightPos.Pad_*` to it (pads mirror tower color by default since games set
-      `LightPos.All`). Hardware check passed 2026-07-07: pads follow tower colors
-      through the ColorCycle ambient, including per-tower hues. When all seven
-      lights are wired, run `experiments/pad_tower_map_test.py` to verify the
-      physical tower/pad ↔ enum mapping (a mismatch looks like wrong pad colors)
+      are the signal; `kill -USR1` for a live stack dump if anything wedges). The
+      soak now also covers the reworked serial path — per-phase stall warnings
+      name `SerialController.update` if the exchange ever eats the frame
+- [x] Real game-driven stomp-pad RGB — merged to `main` in PR #28
+      (`inputsystem-unify`). Hardware check passed 2026-07-07 with one light
+      wired: pads follow tower colors through the ColorCycle ambient, including
+      per-tower hues. When all seven lights are wired, run
+      `experiments/pad_tower_map_test.py` to verify the physical tower/pad ↔ enum
+      mapping (a mismatch looks like wrong pad colors)
 - [ ] Decide whether `LightPos.Pad_top`/`Pad_bottom` stay merged (one physical
       RGB per pad today) or the hardware grows a second addressable LED
 - [ ] Fix or drop the PRINT environment: `PrintSoundSystem` is missing three
@@ -24,6 +24,8 @@ controller rewritten on the `dmx-rewrite` branch.
       `load_sound_bank`, `stop_all`), so `play.py print ...` dies constructing
       the systems (found 2026-07-07 while smoke-testing the factory; predates
       the `inputsystem-unify` work)
+- [ ] **Deploy note: firmware and Pi code must ship together** — mismatched framing
+      halves mean all switches read released
 
 ## Soak test stall — root cause found and fixed (2026-07-06)
 
@@ -42,14 +44,10 @@ Original example code preserved at `experiments/dmx_reference/dmx_controller.py`
 
 ## Branches to land
 
-- [ ] `dmx-rewrite` (stacked on `serial-response-framing`) → after soak validation
-- [ ] `serial-response-framing` (framing + soak instrumentation + TODO rewrite) → into `festival-prep`
-- [ ] `festival-prep` (5 commits: color-cycle experiment, monotonic clock, serial
-      hardening + review fixes, sound_banks gitignore) → into `main`
-- [ ] Delete `git-commit-from-critical-nw-added-to-todo` once this file lands (its only
-      commit recorded the Critical NW hash, now under Reference below)
-- [ ] **Deploy note: firmware and Pi code must ship together** — mismatched framing
-      halves mean all switches read released
+All landed as of 2026-07-07: `serial-response-framing` → `festival-prep` →
+`main`, then `dmx-rewrite`, then `inputsystem-unify` (PR #28). Stale branches
+deleted, including `git-commit-from-critical-nw-added-to-todo` (its Critical NW
+hash lives under Reference below). The firmware/Pi deploy note moved to In flight.
 
 ## Festival-prep roadmap (from the 2026-07-04 review)
 
@@ -62,28 +60,35 @@ Original example code preserved at `experiments/dmx_reference/dmx_controller.py`
 4. [ ] `JackSound.mix_into` bug: `fade_out_index` advances per channel, so multi-tower
        sounds fade N× too fast
 5. [ ] Cleanup pass: `delta_ms`/`delta_secs` naming in GameController, CWD-dependent
-       paths, add a type checker, grow the pytest suite for pure logic, festival
+       paths, add a type checker, grow the pytest suite for pure logic (input-system,
+       serial-protocol, and DMX suites landed 2026-07 — 48 tests), festival
        `config.toml`, README rewrite
 
 ## Assets repo (sound banks)
 
 - [ ] Create the empty GitHub repo `FlyDanoFly/illuminatrix-assets` (private recommended
-      — freesound licenses) and push the nested `sound_banks/` repo
-- [ ] After the assets push is verified: `git gc --prune` in this repo to drop ~1GB of
-      unreachable blobs from the abandoned sound-bank commit (1613201)
+      — freesound licenses) and push the nested `sound_banks/` repo — the sound data
+      currently lives only in that nested repo on this Pi
+- [x] `git gc --prune` for the abandoned sound-bank commit — nothing left to prune as
+      of 2026-07-07: `.git` is 2.1 MB and commit 1613201 is no longer in the object
+      store (a past gc must have taken it)
 - [ ] Prune the local junk variant dirs (`.bak`/`.HIDE`/`.pre_switch`/`.old_without_trimming`)
 
 ## Backlog — gameplay and features (carried from the old list)
 
 - [ ] Cleanup pass (general)
-- [ ] Make system initialization and lifecycle consistent — maybe done, verify
+- [x] Make system initialization and lifecycle consistent — done via
+      `inputsystem-unify`: every per-frame participant is a `BaseSystem` driven
+      from the factory's `get_active_systems()` list in a stated order, and the
+      shared controllers use refcounted startup/shutdown
 - [ ] Fix all the sounds everywhere
 - [ ] Add streaming
 - [ ] Soft startup for selection mode
 - [ ] Win condition for Simon
 - [ ] Death condition for Whack-a-cow
 - [ ] Win condition for Whack-a-cow
-- [ ] Debouncing in the input system
+- [ ] Debouncing in the input system (the serial link already holds state through
+      missed frames; this item is about physical contact bounce)
 
 ## Reference
 
