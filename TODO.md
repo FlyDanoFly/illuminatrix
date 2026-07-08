@@ -70,7 +70,12 @@ hash lives under Reference below). The firmware/Pi deploy note moved to In fligh
 ## Festival-prep roadmap (from the 2026-07-04 review)
 
 1. [ ] Logging overhaul: `dictConfig` + `--log-level` with per-module overrides, convert
-       ~38 `print()`s to logging (the new `--debug` flag is a first step)
+       ~38 `print()`s to logging (the new `--debug` flag is a first step). The
+       default console level should become INFO: today's WARNING default hides
+       the operational breadcrumbs the journal exists for — the 5-minute DMX
+       health lines the soak plan calls "the signal", mixer/serial "connected"
+       lines, and the sound bank preload summary are all invisible without
+       `--debug`
 2. [x] OLA `DmxController` fixes — rewritten from scratch 2026-07-06 on `dmx-rewrite`
        (threaded, self-healing, responses always consumed; fixes the AddEvent leak,
        the olad-restart crash, and the soak stall). Pending soak validation.
@@ -92,6 +97,11 @@ hash lives under Reference below). The firmware/Pi deploy note moved to In fligh
       of 2026-07-07: `.git` is 2.1 MB and commit 1613201 is no longer in the object
       store (a past gc must have taken it)
 - [ ] Prune the local junk variant dirs (`.bak`/`.HIDE`/`.pre_switch`/`.old_without_trimming`)
+- [ ] Mix down the six stereo sound files to mono offline — they're converted at
+      every boot (double RAM during decode + a WARNING each): in
+      `lucy_magic_8_ball/sounds/`: sound-1-167181.mp3, gong-255733.mp3; and
+      level-up-47165.wav + 812364__cvltiv8r__jarbled-sub.wav, which appear in
+      both `lucy_whack_a_mole_1/sounds/` and `simon/game/`
 
 ## Backlog — gameplay and features (carried from the old list)
 
