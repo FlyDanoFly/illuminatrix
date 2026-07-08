@@ -7,7 +7,10 @@ from copy import copy
 from pprint import pprint
 
 from bases.BaseSystem import BaseSystem
-from components.GameController import GameController
+from components.GameController import (
+    GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS,
+    GameController,
+)
 from components.TowerController import TowerController
 from constants.constants import (
     ENVIRONMENT_CONTEXT,
@@ -69,9 +72,13 @@ def main():
 
     parser.add_argument("--allgames", default=False, action="store_true", help="make all games available, not just production games")
 
-    parser.add_argument("--debug", action="append", default=[], metavar="LOGGER", help="set the named logger to DEBUG, e.g. systems.concrete.SwitchInputSystem (repeatable; '' debugs everything)")
+    parser.add_argument("--debug", action="append", default=[], metavar="LOGGER", help="set the named logger to DEBUG (repeatable; '' debugs everything; see --list-loggers for names)")
+
+    parser.add_argument("--list-loggers", action="store_true", help="print the logger names available to --debug and exit")
 
     parser.add_argument("--no-sound", action="store_true", help="disable audio entirely (no JACK server needed)")
+
+    parser.add_argument("--ambient-idle-secs", type=float, default=GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS, help="seconds without input in selection mode before dropping to the ambient game")
 
     parser.add_argument("games", nargs="*", choices=sorted(available_games.keys()), help="game to run")
 
@@ -79,6 +86,12 @@ def main():
 
     for logger_name in options.debug:
         logging.getLogger(logger_name).setLevel(logging.DEBUG)
+
+    if options.list_loggers:
+        # Everything is imported by now, so the registry is complete
+        for name in sorted(logging.Logger.manager.loggerDict):
+            print(name)
+        return
 
     # Get the ambient game out of the available games
     ambient_game = available_games[AMBIENT_GAME]
@@ -129,11 +142,6 @@ def main():
     # TODO: this might pop, black will be better for production
     tower_controller.set_color((1.0, 1.0, 1.0))
 
-    # Uncomment to see all the logger names available to --debug
-    # logger_dict = logging.Logger.manager.loggerDict
-    # for name in logger_dict:
-    #     print("-->", name)
-
     # Start the systems
     for system in active_systems:
         system.startup()
@@ -170,6 +178,7 @@ def main():
         tower_controller,
         list(games_to_play),
         ambient_game,
+        select_idle_timeout_secs=options.ambient_idle_secs,
     )
 
     # A frame that blows way past the ~33ms budget is a stall; warn with the

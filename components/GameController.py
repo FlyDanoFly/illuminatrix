@@ -59,6 +59,7 @@ class GameController(StateMachineMixin, StateMachine):
         tower_controller: TowerController,
         game_classes: Sequence[type[BaseGame]],
         ambient_class: type[BaseGame],
+        select_idle_timeout_secs: float = GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS,
     ):
         """
         Args
@@ -84,6 +85,7 @@ class GameController(StateMachineMixin, StateMachine):
 
         self._game_idle_secs: float = 0.0
         self._controller_input_idle_secs: float = 0.0
+        self._select_idle_timeout_secs: float = select_idle_timeout_secs
 
         # Special case: if there is only one game passed in just use that, don't choose
         if len(game_classes) == 1:
@@ -116,7 +118,7 @@ class GameController(StateMachineMixin, StateMachine):
             self._controller_input_idle_secs = 0.0
         else:
             self._controller_input_idle_secs += delta_secs
-            if self._controller_input_idle_secs > GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS:
+            if self._controller_input_idle_secs > self._select_idle_timeout_secs:
                 self._selected_game = self._ambient_class
                 self.start_game()
                 return
