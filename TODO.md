@@ -13,7 +13,10 @@ controller rewritten on the `dmx-rewrite` branch.
       serial link is now `SerialController` (light sink + input source),
       `SwitchInputSystem` is a facade over it, and `EmbeddedLightSystem` routes
       `LightPos.Pad_*` to it (pads mirror tower color by default since games set
-      `LightPos.All`). Needs a hardware check: pads should follow tower colors
+      `LightPos.All`). Hardware check passed 2026-07-07: pads follow tower colors
+      through the ColorCycle ambient, including per-tower hues. When all seven
+      lights are wired, run `experiments/pad_tower_map_test.py` to verify the
+      physical tower/pad ↔ enum mapping (a mismatch looks like wrong pad colors)
 - [ ] Decide whether `LightPos.Pad_top`/`Pad_bottom` stay merged (one physical
       RGB per pad today) or the hardware grows a second addressable LED
 - [ ] Fix or drop the PRINT environment: `PrintSoundSystem` is missing three
