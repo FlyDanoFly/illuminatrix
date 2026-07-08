@@ -21,7 +21,12 @@ pads were verified on hardware.
       RGB per pad today) or the hardware grows a second addressable LED
 - [x] Fix or drop the PRINT environment — fixed 2026-07-07 on
       `sound-system-review`: `PrintSound`/`PrintSoundSystem` implement the full
-      abstract contract and the factory constructs all three PRINT systems
+      abstract contract and the factory constructs all three PRINT systems.
+      Now usable as a desk simulator (`play.py print --allgames <Game>`):
+      keyboard input (1-7 = towers, enter/space/esc = controller; degrades to
+      no-input when stdin isn't a TTY), change-driven throttled light printing
+      (~5 lines/sec instead of ~200), and `NullSoundSystem` is a working silent
+      option. Possible future tier: ANSI 24-bit color blocks as live towers
 - [ ] Sound bank loading is synchronous inside the game loop and now logged
       with timing (INFO "Loaded sound bank ..."): ambient is 213MB and
       story_time 947MB on disk, decoded to float32 mono in RAM, and ColorCycle

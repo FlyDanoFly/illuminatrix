@@ -7,7 +7,6 @@ from systems.concrete.dmx_controller import DmxController
 from systems.concrete.EmbeddedLightSystem import EmbeddedLightSystem
 from systems.concrete.JackSoundSystem import JackMixer, JackSoundSystem
 from systems.concrete.KeyboardInputSystem import KeyboardInputSystem
-from systems.concrete.PrintInputSystem import PrintInputSystem
 from systems.concrete.PrintLightSystem import PrintLightSystem
 from systems.concrete.PrintSoundSystem import PrintSoundSystem
 from systems.concrete.serial_controller import SerialController
@@ -30,7 +29,9 @@ class SystemSingletonFactory:
     INPUT_SYSTEM_MAP: dict[Environment, type[InputSystem]] = {
         Environment.EMBEDDED: SwitchInputSystem,
         Environment.WEB: KeyboardInputSystem,
-        Environment.PRINT: PrintInputSystem,
+        # Keys 1-7 are the towers; enter/space/esc the controller buttons.
+        # Degrades to no input when stdin is not a TTY
+        Environment.PRINT: KeyboardInputSystem,
     }
 
     _light_system: LightSystem

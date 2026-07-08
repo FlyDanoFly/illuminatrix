@@ -38,10 +38,10 @@ class PrintSoundSystem(SoundSystem):
         return False
 
     def update(self, delta_secs: float) -> None:
-        print(f"PrintSoundSystem: Updating the sound, {delta_secs=}")
+        pass
 
     def render(self) -> None:
-        print("PrintSoundSystem: Rendering the sound")
+        pass
 
     def startup(self) -> None:
         print("PrintSoundSystem: Starting up the sound system")

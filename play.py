@@ -97,6 +97,17 @@ def main():
             parser.error("running a web simulation requires --id")
         context["light_system"]["client_id"] = options.id
 
+    # All games are available unless a subset is specified on the command
+    # line. Validated before any system starts up, so a typo'd game name
+    # doesn't leave started systems behind
+    games_to_play = available_games.values()
+    if options.games:
+        games_to_play = {v for v in available_games.values() if v.__name__ in options.games}
+
+    if not games_to_play:
+        print("No games selected, did you mean to specify --allgames?")
+        return
+
     # Instantiate the systems; the factory owns the per-frame update
     # order (transports first, then the systems)
     systems = SystemSingletonFactory(options.environment, context)
@@ -125,15 +136,6 @@ def main():
 
     print("Sleep 2 to warmup to wait for the serial system to init")
     time.sleep(2)
-
-    # All games are available unless a subset is specificed on the command line
-    games_to_play = available_games.values()
-    if options.games:
-        games_to_play = {v for v in available_games.values() if v.__name__ in options.games}
-
-    if not games_to_play:
-        print("No games selected, did you mean to specify --allgames?")
-        return
 
     game_controller = GameController(
         systems,

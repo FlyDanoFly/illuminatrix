@@ -1,4 +1,5 @@
 import logging
+import sys
 
 from bases.InputSystem import InputSystem
 from constants.constants import ControllerSwitchEnum, TowerEnum
@@ -25,16 +26,25 @@ class KeyboardInputSystem(InputSystem):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._kbhit = KBHit()
+        # KBHit needs termios; under a pipe or systemd there is no
+        # terminal, so degrade to all-switches-released instead of dying
+        self._tty_available: bool = sys.stdin.isatty()
 
     def startup(self) -> None:
-        self._kbhit.startup()
+        if self._tty_available:
+            self._kbhit.startup()
+        else:
+            logger.warning("stdin is not a TTY — keyboard input disabled, all switches read released")
         return super().startup()
 
     def shutdown(self) -> None:
-        self._kbhit.shutdown()
+        if self._tty_available:
+            self._kbhit.shutdown()
         return super().shutdown()
 
     def _read_switches(self, delta_secs: float) -> None:
+        if not self._tty_available:
+            return
         while self._kbhit.kbhit():
             c = self._kbhit.getch()
             switch = TOWER_KEYMAP.get(c) or CONTROLLER_KEYMAP.get(c)
