@@ -15,6 +15,7 @@ from constants.constants import (
     TowerEnum,
 )
 from managers.ManagerSingletonFactory import ManagerSingletonFactory
+from systems.concrete.NullSoundSystem import NullSoundSystem
 from systems.SystemSingletonFactory import SystemSingletonFactory
 from utils import find_game_classes
 
@@ -70,6 +71,8 @@ def main():
 
     parser.add_argument("--debug", action="append", default=[], metavar="LOGGER", help="set the named logger to DEBUG, e.g. systems.concrete.SwitchInputSystem (repeatable; '' debugs everything)")
 
+    parser.add_argument("--no-sound", action="store_true", help="disable audio entirely (no JACK server needed)")
+
     parser.add_argument("games", nargs="*", choices=sorted(available_games.keys()), help="game to run")
 
     options = parser.parse_args()
@@ -110,7 +113,11 @@ def main():
 
     # Instantiate the systems; the factory owns the per-frame update
     # order (transports first, then the systems)
-    systems = SystemSingletonFactory(options.environment, context)
+    systems = SystemSingletonFactory(
+        options.environment,
+        context,
+        sound_system_override=NullSoundSystem if options.no_sound else None,
+    )
     active_systems: list[BaseSystem] = systems.get_active_systems()
 
     managers: ManagerSingletonFactory = ManagerSingletonFactory(systems)

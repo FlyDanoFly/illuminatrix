@@ -6,7 +6,6 @@ Most important next goal is to get it running with a simulation.
 
 import logging
 import random
-import signal
 import sys
 import threading
 import time
@@ -82,13 +81,13 @@ def load_sound_bank(directory: str) -> dict[str, SoundData]:
     Look for a sound_bank_manifest.json file in the directory, and if it exists, load the sounds listed in it.
 
     The manifest should be a JSON5 file with the following structure:
-    [
+    {
         "sound_name": {
             "file": "path/to/sound/file.wav",
-            "type": "sound"  # or "music", "ambience", "voice"
+            "type": "sound",  // or "music", "ambience", "voice"
         },
         ...
-    ]
+    }
     """
     sound_bank = {}
     manifest_file = f"{directory}/sound_bank_manifest.json"
@@ -98,18 +97,11 @@ def load_sound_bank(directory: str) -> dict[str, SoundData]:
             for name, sound_info in manifest.items():
                 filename = sound_info['file']
                 full_path = f"{directory}/{filename}"
-                match sound_info['type']:
-                    case SoundType.SOUND.value:
-                        pass  # sound_info['type'] = 'sound'  # This is the default, so we don't need to set it
-                    case SoundType.MUSIC.value:
-                        pass  # sound_info['type'] = 'music'
-                    case SoundType.AMBIENCE.value:
-                        pass  # sound_info['type'] = 'ambience'
-                    case SoundType.VOICE.value:
-                        pass  # sound_info['type'] = 'voice'
-                    case _:
-                        logger.warning("Unknown sound type %s for %s, defaulting to 'sound'", sound_info['type'], name)
-                        sound_info['type'] = 'sound'
+                try:
+                    sound_type = SoundType(sound_info['type'])
+                except ValueError:
+                    logger.warning("Unknown sound type %r for %s, defaulting to 'sound'", sound_info['type'], name)
+                    sound_type = SoundType.SOUND
 
                 # TODO: add support for other sound types, for now load everything as 'sound'
                 file_start_secs = time.perf_counter()
@@ -121,7 +113,7 @@ def load_sound_bank(directory: str) -> dict[str, SoundData]:
                 sound_bank[name] = SoundData(
                     key=name,
                     filename=filename,
-                    sound_type=SoundType(sound_info['type']),
+                    sound_type=sound_type,
                     data=data,
                     samplerate=samplerate,
                 )
@@ -184,7 +176,9 @@ class JackSound(Sound):
             return True
         if self.fade_out_active:
             return False
-        if self.loops > 0:
+        if self.loops != 0:
+            # Loops remain (negative means forever); position may rest
+            # exactly at the end between callbacks — the next one wraps
             return False
         return self.position >= len(self.data)
 
@@ -205,37 +199,48 @@ class JackSound(Sound):
 
         The block (and its fade-curve segment) is computed once and added
         identically to each channel; per-sound state advances once per
-        callback, no matter how many towers the sound plays on.
+        callback, no matter how many towers the sound plays on. A looping
+        sound wraps within the block, so loop boundaries are gapless
+        instead of leaving up to one JACK period of silence.
         """
         frames = len(output_buffers[0])
-        position = self.position
-        remaining = len(self.data) - position
-        block_len = min(frames, remaining)
-        samples = self.data[position:position + block_len]
+
+        segments = []
+        filled = 0
+        while filled < frames:
+            remaining = len(self.data) - self.position
+            if remaining <= 0:
+                if self.loops == 0:
+                    break
+                self.loops -= 1
+                self.position = 0
+                remaining = len(self.data)
+            take = min(frames - filled, remaining)
+            segments.append(self.data[self.position:self.position + take])
+            self.position += take
+            filled += take
+        if len(segments) == 1:
+            block = segments[0]
+        elif segments:
+            block = numpy.concatenate(segments)
+        else:
+            block = self.data[:0]
 
         if self.fade_out_active or self.fade_out_complete:
             fade_remaining = len(self.fade_out_curve) - self.fade_out_index
-            fade_len = min(block_len, fade_remaining)
-            samples = samples[:fade_len] * self.fade_out_curve[self.fade_out_index:self.fade_out_index + fade_len]
+            fade_len = min(len(block), fade_remaining)
+            block = block[:fade_len] * self.fade_out_curve[self.fade_out_index:self.fade_out_index + fade_len]
             self.fade_out_index += fade_len
             if self.fade_out_index >= len(self.fade_out_curve) or fade_len <= 0:
                 self.fade_out_active = False
                 self.fade_out_complete = True
-            advance = fade_len
         else:
-            samples = samples * self.volume
-            advance = block_len
+            block = block * self.volume
 
         for target_channel in (tower_enum.value - 1 for tower_enum in channel_map):
             if target_channel >= len(output_buffers):
                 continue
-            output_buffers[target_channel][:advance] += samples
-
-        position += advance
-        if position >= len(self.data) and self.loops != 0:
-            self.loops -= 1
-            position = 0
-        self.position = position
+            output_buffers[target_channel][:len(block)] += block
 
 
 class JackMixer:
@@ -502,67 +507,22 @@ class JackSoundSystem(SoundSystem):
         """Check if any sounds are currently playing."""
         return self.mixer.is_anything_playing()
 
-# === Usage Example ===
-def main():
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-
-    mixer = JackMixer()
-    mixer.startup()
-
-    sound_bank = load_sound_bank("sound_banks/lucy_whack_a_mole_1")
-    snd1: Sound|None = sound_bank["boom"].create_sound(volume=0.1, num_loops=10)  # Create a sound with volume and number of loops
-    snd2 = sound_bank["boom"].create_sound(num_loops=-1)  # Loop forever
-
-    # filename = "LRMonof32.wav"  # Default
-    # if len(sys.argv) > 1:
-    #     filename = sys.argv[1]
-    # snd1 = Sound(filename, num_loops=10)
-    # snd2 = Sound(filename, num_loops=-1)  # Loop forever
-
-    stop_first_sound_time = 5.0 + time.time()
-    mixer.play(snd1, [TowerEnum.Tower_1])       # Play to channel 0
-    time.sleep(1.0)
-    mixer.play(snd2, [TowerEnum.Tower_2])    # Play stereo sound to channels 2 and 3
-
-    def shutdown_handler(*_) -> None:
-        # handler(signal_number: int, frame: types.FrameType|None)
-        # The handler is called with two arguments: the signal number and the
-        # current stack frame (None or a frame object; for a description of
-        # frame objects, see the description in the type hierarchy or see the
-        # attribute descriptions in the inspect module).
-        logger.info("\nSignal received, shutting down...")
-        mixer.stop_all(fade_secs=1.0)
-        # time.sleep(1.2)
-        while mixer.is_anything_playing():
-            logger.info("   fading %.3f", mixer.client.cpu_load())
-            time.sleep(0.05)
-        mixer.shutdown()
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, shutdown_handler)
-    signal.signal(signal.SIGTERM, shutdown_handler)
-
-    try:
-        # Keep main thread alive while sounds play
-        i = 0
-        while mixer.is_anything_playing():
-            logger.info("waiting for sounds to finish %d %.3f %.3f %r", i, mixer.client.cpu_load(), time.time()-stop_first_sound_time, snd1)
-            if snd1 and time.time() > stop_first_sound_time:
-                logger.info("Stopping first sound")
-                logger.info("Stopping first sound")
-                logger.info("Stopping first sound")
-                logger.info("Stopping first sound")
-                logger.info("Stopping first sound")
-                snd1.start_fade_out(0.1)
-                # snd1.stop()
-                snd1 = None
-            time.sleep(0.5)
-            i += 1
-    except KeyboardInterrupt:
-        logger.info("keyboardinterrupt received")
-
-    mixer.shutdown()
-    logger.info("that's it")
-
 if __name__ == "__main__":
-    main()
+    # Bench smoke test: loops the first sound of a bank through JACK.
+    # Needs a running JACK server; ^C to quit.
+    #
+    #     python systems/concrete/JackSoundSystem.py [bank_dir] [sound_name]
+    logging.basicConfig(level=logging.DEBUG)
+    system = JackSoundSystem(mixer=JackMixer())
+    system.startup()
+    system.load_sound_bank(sys.argv[1] if len(sys.argv) > 1 else "sound_banks/lucy_whack_a_mole_1")
+    sound_name = sys.argv[2] if len(sys.argv) > 2 else next(iter(system.sound_bank))
+    try:
+        system.play(sound_name, volume=0.5, num_loops=-1)
+        while True:
+            system.update(1 / 30)
+            time.sleep(1 / 30)
+    except KeyboardInterrupt:
+        print("Exiting")
+    finally:
+        system.shutdown()

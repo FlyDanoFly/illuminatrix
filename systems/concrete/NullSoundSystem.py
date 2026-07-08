@@ -24,6 +24,10 @@ class NullSoundSystem(SoundSystem):
     """Fully silent sound system — run the installation without audio
     (e.g. hardware debugging) with no JACK server and no console noise."""
 
+    def __init__(self, **_):
+        # Tolerates context keys meant for other sound systems
+        super().__init__()
+
     def load_sound_bank(self, path: str) -> None:
         pass
 

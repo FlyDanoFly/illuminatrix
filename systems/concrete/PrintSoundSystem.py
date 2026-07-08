@@ -24,6 +24,10 @@ class PrintSound(Sound):
 
 
 class PrintSoundSystem(SoundSystem):
+    def __init__(self, **_):
+        # Tolerates context keys meant for other sound systems
+        super().__init__()
+
     def load_sound_bank(self, path: str) -> None:
         print(f"PrintSoundSystem: Loading sound bank {path}")
 

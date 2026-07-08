@@ -80,21 +80,37 @@ def test_fade_starts_from_current_volume():
     assert bufs[0][49] < bufs[0][0], "and decreases"
 
 
-def test_looping_wraps_and_finite_loops_run_out():
+def test_looping_wraps_gapless_and_finite_loops_run_out():
     snd = make_sound(n_samples=30, num_loops=1)
-    snd.mix_into(make_buffers(frames=50), [TowerEnum.Tower_1])
-    assert snd.position == 0, "wrapped to the start"
+    bufs = make_buffers(frames=50)
+    snd.mix_into(bufs, [TowerEnum.Tower_1])
+    assert numpy.allclose(bufs[0], 1.0), "loop boundary fills the whole buffer — no silent gap"
     assert snd.loops == 0
     assert not snd.is_done()
     snd.mix_into(make_buffers(frames=50), [TowerEnum.Tower_1])
     assert snd.is_done(), "last loop played out"
 
 
-def test_infinite_loop_never_finishes():
+def test_infinite_loop_never_finishes_and_fills_every_buffer():
     snd = make_sound(n_samples=30, num_loops=-1)
     for _ in range(10):
-        snd.mix_into(make_buffers(frames=50), [TowerEnum.Tower_1])
+        bufs = make_buffers(frames=50)
+        snd.mix_into(bufs, [TowerEnum.Tower_1])
+        assert numpy.allclose(bufs[0], 1.0), "gapless across every wrap"
         assert not snd.is_done()
+
+
+def test_loop_boundary_coinciding_with_block_end_is_not_done():
+    # Regression: when the block ends exactly at the data's end, position
+    # rests at len(data) without wrapping; a looping sound must still
+    # report not-done and continue on the next callback
+    snd = make_sound(n_samples=50, num_loops=-1)
+    snd.mix_into(make_buffers(frames=50), [TowerEnum.Tower_1])
+    assert snd.position == 50, "block ended exactly at the data end"
+    assert not snd.is_done()
+    bufs = make_buffers(frames=50)
+    snd.mix_into(bufs, [TowerEnum.Tower_1])
+    assert numpy.allclose(bufs[0], 1.0), "next callback wrapped and kept playing"
 
 
 def test_stop_is_immediately_done_and_mixes_silence():

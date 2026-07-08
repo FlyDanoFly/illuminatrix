@@ -25,14 +25,19 @@ pads were verified on hardware.
       Now usable as a desk simulator (`play.py print --allgames <Game>`):
       keyboard input (1-7 = towers, enter/space/esc = controller; degrades to
       no-input when stdin isn't a TTY), change-driven throttled light printing
-      (~5 lines/sec instead of ~200), and `NullSoundSystem` is a working silent
-      option. Possible future tier: ANSI 24-bit color blocks as live towers
+      (~5 lines/sec instead of ~200), and `NullSoundSystem` works and is
+      selected by `play.py --no-sound` (any environment). Possible future
+      tier: ANSI 24-bit color blocks as live towers
 - [ ] Sound bank loading is synchronous inside the game loop and now logged
       with timing (INFO "Loaded sound bank ..."): ambient is 213MB and
       story_time 947MB on disk, decoded to float32 mono in RAM, and ColorCycle
       reloads the ambient bank on every 2-minute idle timeout. Measure on
       hardware, then decide: cache banks by path, lazy-load per sound, or
       stream (see backlog "Add streaming")
+- [ ] Make `ColorCycle` runnable from the command line: it's extracted from the
+      selectable games as the ambient game before selection happens, so
+      `play.py print --allgames ColorCycle` says "No games selected" — surprising
+      for the game you most want to smoke-test
 - [ ] **Deploy note: firmware and Pi code must ship together** — mismatched framing
       halves mean all switches read released
 

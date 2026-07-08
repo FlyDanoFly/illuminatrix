@@ -39,7 +39,12 @@ class SystemSingletonFactory:
     _input_system: InputSystem
     _active_systems: list[BaseSystem]
 
-    def __init__(self, mode: Environment, context: dict):
+    def __init__(
+            self,
+            mode: Environment,
+            context: dict,
+            sound_system_override: type[SoundSystem] | None = None,
+    ):
         self.mode: Environment = mode
         self.context: dict = context or {}
 
@@ -65,9 +70,12 @@ class SystemSingletonFactory:
         self._light_system = light_system(**light_kwargs)
 
         sound_kwargs = dict(self.context["sound_system"])
-        sound_system = SystemSingletonFactory.SOUND_SYSTEM_MAP[self.mode]
+        sound_system = sound_system_override or SystemSingletonFactory.SOUND_SYSTEM_MAP[self.mode]
+        # Popped unconditionally: the mixer config is JACK transport
+        # detail, meaningless to an overridden (e.g. --no-sound) system
+        mixer_config = sound_kwargs.pop("mixer", {})
         if sound_system is JackSoundSystem:
-            sound_kwargs["mixer"] = JackMixer(**sound_kwargs.pop("mixer", {}))
+            sound_kwargs["mixer"] = JackMixer(**mixer_config)
         self._sound_system = sound_system(**sound_kwargs)
 
         # Everything the game loop drives each frame, in update order.
