@@ -5,7 +5,7 @@ from bases.SoundSystem import SoundSystem
 from constants.constants import Environment
 from systems.concrete.dmx_controller import DmxController
 from systems.concrete.EmbeddedLightSystem import EmbeddedLightSystem
-from systems.concrete.JackSoundSystem import JackSoundSystem
+from systems.concrete.JackSoundSystem import JackMixer, JackSoundSystem
 from systems.concrete.KeyboardInputSystem import KeyboardInputSystem
 from systems.concrete.PrintInputSystem import PrintInputSystem
 from systems.concrete.PrintLightSystem import PrintLightSystem
@@ -63,8 +63,11 @@ class SystemSingletonFactory:
             light_kwargs["serial_controller"] = serial_controller
         self._light_system = light_system(**light_kwargs)
 
+        sound_kwargs = dict(self.context["sound_system"])
         sound_system = SystemSingletonFactory.SOUND_SYSTEM_MAP[self.mode]
-        self._sound_system = sound_system(**self.context["sound_system"])
+        if sound_system is JackSoundSystem:
+            sound_kwargs["mixer"] = JackMixer(**sound_kwargs.pop("mixer", {}))
+        self._sound_system = sound_system(**sound_kwargs)
 
         # Everything the game loop drives each frame, in update order.
         # The serial transport goes first: its exchange sends the colors

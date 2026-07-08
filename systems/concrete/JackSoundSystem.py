@@ -26,12 +26,19 @@ logger = logging.getLogger(__name__)
 
 
 JACKMIXER_USE_SERVER = True
+JACK_SERVER_NAME = "illuminatrix_jack_server_mixer"
+
+# Minimum time between attempts to (re)connect to the JACK server
+JACK_RECONNECT_INTERVAL_SECS = 2.0
+# While disconnected, repeat an ERROR at this interval so a silent
+# installation is visible in the log stream, not just one line at startup
+JACK_DISCONNECTED_LOG_INTERVAL_SECS = 30.0
 
 
 class MixerState(Enum):
     INIT = 0
     STARTED = 1
-    STOPPED = 2
+    DISCONNECTED = 2
     SHUTDOWN = 3
 
 
@@ -232,25 +239,35 @@ class JackSound(Sound):
 
 
 class JackMixer:
-    def __init__(self, name: str = "jack_mixer"):
+    """Mixes Sound objects into JACK output ports, one port per tower.
+
+    Connection lives in startup(), not __init__, and failures degrade
+    instead of raising: a missing JACK server costs sound output, never
+    the process. update() — driven every frame by JackSoundSystem —
+    notices a dead server, drops the sounds it can no longer finish, and
+    retries the connection, rate limited.
+    """
+
+    def __init__(
+            self,
+            name: str = "jack_mixer",
+            use_server: bool = JACKMIXER_USE_SERVER,
+            servername: str = JACK_SERVER_NAME,
+    ):
         # TODO: perhaps make the channel auto detected, as well as the force to stereo?
-        # If the server is already running, use this instead
-        if JACKMIXER_USE_SERVER:
-            self.client: jack.Client = jack.Client(
-                name,
-                no_start_server=True,
-                servername="illuminatrix_jack_server_mixer",
-            )
-        else:
-            self.client: jack.Client = jack.Client(name)
+        self.name = name
+        self.use_server = use_server
+        self.servername = servername
+        self.client: jack.Client | None = None
         self.outports: list[jack.OwnPort] = []
-        # self.active_sounds: list[tuple[JackSound, list[TowerEnum]]] = []
         self.active_sounds: list[tuple[Sound, list[TowerEnum]]] = []
         self.lock: threading.Lock = threading.Lock()
         self.state: MixerState = MixerState.INIT
-        self.shutdown_called: bool = False
-        self.client.set_process_callback(self.process)
         self.force_play_on_all_channels: bool = False
+        # Set from JACK's shutdown-callback thread; handled in update()
+        self._server_went_away: bool = False
+        self._last_connect_attempt_secs: float = float("-inf")
+        self._last_disconnected_log_secs: float = float("-inf")
 
     def process(self, _: int):
         # the parameter is the number of frames to process
@@ -274,39 +291,111 @@ class JackMixer:
                     still_playing.append((sound, channel_map))
             self.active_sounds = still_playing
 
-    def startup(self, auto_connect=True):
+    def startup(self):
         if self.state != MixerState.INIT:
             raise RuntimeError("Mixer can only be started from INIT state")
-        self.client.activate()
-        self.state = MixerState.STARTED
-        if auto_connect:
-            self._connect_to_physical_outputs()
-        logger.info("Mixer started.")
+        if self._try_connect():
+            self.state = MixerState.STARTED
+        else:
+            self.state = MixerState.DISCONNECTED
+            logger.error(
+                "JACK server unavailable at startup — no sound until it appears, retrying"
+            )
 
-    def _connect_to_physical_outputs(self):
-        # Auto-connect to physical outputs
-        system_out_ports = self.client.get_ports(is_physical=True, is_input=True, is_audio=True, is_midi=False)
-        for i, system_port in enumerate(system_out_ports, start=1):
-            outport = typing.cast("jack.OwnPort", self.client.outports.register(f"out_{i}"))
-            self.client.connect(outport, system_port)
-            self.outports.append(outport)
-        if len(self.outports) == 2:
+    def update(self) -> None:
+        """Per-frame maintenance, driven by JackSoundSystem: notice a dead
+        server, tear down its client, and reconnect (rate limited)."""
+        if self.state not in (MixerState.STARTED, MixerState.DISCONNECTED):
+            return
+        if self._server_went_away:
+            self._server_went_away = False
+            logger.error(
+                "JACK server went away — dropping %d active sounds, reconnecting",
+                len(self.active_sounds),
+            )
+            self._teardown_client()
+            self.state = MixerState.DISCONNECTED
+        if self.state == MixerState.DISCONNECTED:
+            if self._try_connect():
+                self.state = MixerState.STARTED
+            else:
+                self._log_disconnected()
+
+    def _try_connect(self) -> bool:
+        """Open a client, register ports, activate. Rate limited so a dead
+        server doesn't get hammered every frame."""
+        now = time.monotonic()
+        if now - self._last_connect_attempt_secs < JACK_RECONNECT_INTERVAL_SECS:
+            return False
+        self._last_connect_attempt_secs = now
+        client = None
+        try:
+            if self.use_server:
+                client = jack.Client(self.name, no_start_server=True, servername=self.servername)
+            else:
+                client = jack.Client(self.name)
+            client.set_process_callback(self.process)
+            client.set_shutdown_callback(self._on_server_shutdown)
+            client.activate()
+            ports = []
+            system_ports = client.get_ports(is_physical=True, is_input=True, is_audio=True, is_midi=False)
+            for i, system_port in enumerate(system_ports, start=1):
+                outport = typing.cast("jack.OwnPort", client.outports.register(f"out_{i}"))
+                client.connect(outport, system_port)
+                ports.append(outport)
+        except jack.JackError as e:
+            logger.debug("JACK connect attempt failed: %s", e)
+            if client is not None:
+                try:
+                    client.close()
+                except jack.JackError:
+                    pass
+            return False
+        self.force_play_on_all_channels = len(ports) == 2
+        if self.force_play_on_all_channels:
             # If we have exactly two output ports, force them to be stereo
-            self.force_play_on_all_channels = True
             logger.info("Stereo output detected, forcing stereo playback on all channels.")
+        self.outports = ports
+        self.client = client
+        # Reset so a future outage logs immediately again
+        self._last_disconnected_log_secs = float("-inf")
+        logger.info("Mixer connected to JACK (%d outputs)", len(ports))
+        return True
+
+    def _on_server_shutdown(self, status, reason) -> None:
+        # Called on JACK's thread; defer all teardown to update() on the
+        # game loop, where the lock and client are safe to touch
+        self._server_went_away = True
+
+    def _log_disconnected(self) -> None:
+        now = time.monotonic()
+        if now - self._last_disconnected_log_secs < JACK_DISCONNECTED_LOG_INTERVAL_SECS:
+            return
+        self._last_disconnected_log_secs = now
+        logger.error("JACK server unavailable — no sound until it returns")
+
+    def _teardown_client(self) -> None:
+        client, self.client = self.client, None
+        self.outports = []
+        with self.lock:
+            # Sounds can't finish without process callbacks; games gating
+            # on are_any_sounds_playing() must not wait forever
+            self.active_sounds = []
+        if client is None:
+            return
+        try:
+            client.deactivate()
+            client.close()
+        except jack.JackError as e:
+            logger.debug("Ignoring error closing dead JACK client: %s", e)
 
     def shutdown(self):
-        if self.shutdown_called or self.state in [MixerState.SHUTDOWN, MixerState.INIT]:
+        if self.state in (MixerState.SHUTDOWN, MixerState.INIT):
             return
-        self.shutdown_called = True
         self.state = MixerState.SHUTDOWN
         logger.info("Shutting down JACK mixer...")
-        self.client.deactivate()
-        time.sleep(0.5)  # Give one last pause to let the terminal flush all text
-        self.client.close()
-        time.sleep(0.5)  # Give one last pause to let the terminal flush all text
+        self._teardown_client()
         logger.info("Mixer shut down cleanly.")
-        time.sleep(0.5)  # Give one last pause to let the terminal flush all text
 
     def play(self, sound: Sound, channel_map: list[TowerEnum] | TowerEnum | None = None):
         """Play a sound on the mixer.
@@ -315,12 +404,15 @@ class JackMixer:
             sound (Sound): The sound to play.
             channel_map (list[TowerEnum]): A list of channel indices to play the sound on. Defaults to all channels.
         """
+        if self.state == MixerState.INIT:
+            raise RuntimeError("Mixer must be started to play sounds")
+        if self.state != MixerState.STARTED:
+            logger.warning("JACK not connected, dropping sound")
+            return
         if channel_map is None or self.force_play_on_all_channels:
-            channel_map = list(TowerEnum) # list(range(len(self.outports)))
+            channel_map = list(TowerEnum)
         if not isinstance(channel_map, list):
             channel_map = [channel_map]
-        if self.state != MixerState.STARTED:
-            raise RuntimeError("Mixer must be started to play sounds")
         with self.lock:
             self.active_sounds.append((sound, channel_map))
 
@@ -341,13 +433,14 @@ SHUTDOWN_FADE_GRACE_SECS = 1.0
 
 
 class JackSoundSystem(SoundSystem):
-    def __init__(self):
+    def __init__(self, mixer: JackMixer, **_):
         super().__init__()
-        self.mixer = JackMixer()
+        self.mixer = mixer
         self.sound_bank: dict[str, SoundData] = {}
 
     def startup(self) -> None:
-        """Start the JACK mixer."""
+        """Start the JACK mixer (degrades to silence if the server is
+        missing; the mixer keeps retrying from update())."""
         self.mixer.startup()
 
     def shutdown(self) -> None:
@@ -364,16 +457,12 @@ class JackSoundSystem(SoundSystem):
         self.mixer.shutdown()
 
     def update(self, delta_secs: float) -> None:
-        """Update the JACK mixer state."""
-        # This method is not implemented in this example, as the mixer processes audio in its own thread.
-        # If needed, you could implement periodic updates or checks here.
-        # Perhaps dealing with streaming data?
-        # print("Audio cpu_load(): %s", self.mixer.client.cpu_load())
+        """Audio itself renders on JACK's thread; this drives the mixer's
+        housekeeping (server-death detection and reconnect)."""
+        self.mixer.update()
 
     def render(self) -> None:
-        """Render the current state of the JACK mixer."""
-        # This method is not implemented in this example, as the mixer processes audio in its own thread.
-        # If needed, you could implement periodic rendering or checks here.
+        """Audio renders on JACK's thread; nothing to do per frame."""
         pass
 
     def load_sound_bank(self, path: str) -> None:

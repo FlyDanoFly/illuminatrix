@@ -51,7 +51,12 @@ ENVIRONMENT_CONTEXT = {
             # Override here if needed, e.g.: {"universe": 1}
             "dmx_controller": {},
         },
-        "sound_system": {},
+        "sound_system": {
+            # JackMixer config; defaults live in JackSoundSystem.py.
+            # Override here if needed, e.g.:
+            # "mixer": {"servername": "other_jack_server"},
+            "mixer": {},
+        },
         "input_system": {
             # SerialController config; defaults live in serial_controller.py.
             # Override here if the controller enumerates elsewhere, e.g.:
@@ -65,7 +70,9 @@ ENVIRONMENT_CONTEXT = {
             "server_address": "wss://houseofsucky.xyz/illuminatrix_simulation_server",
             # "ack_style": "",  # not sure about the scope of this yet
         },
-        "sound_system": {},
+        "sound_system": {
+            "mixer": {},
+        },
         "input_system": {},
         "effect_system": {},
     },
