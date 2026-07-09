@@ -1,8 +1,9 @@
 # Illuminatrix TODO
 
-Last groomed: 2026-07-07, after `inputsystem-unify` merged (PR #28): the serial
-transport is a loop-driven system, the factory owns controller construction, and
-pads were verified on hardware.
+Last groomed: 2026-07-08, with `sound-system-review` (PR #29) reviewed and
+hardened: sound banks preload at boot from game declarations, JackMixer
+self-heals, `play()` always returns a Sound (failures come back already
+finished), and CLAUDE.md now records the project's rules.
 
 ## In flight
 
@@ -85,8 +86,11 @@ hash lives under Reference below). The firmware/Pi deploy note moved to In fligh
        into every mapped channel, with regression tests (`tests/test_jack_sound.py`)
 5. [ ] Cleanup pass: `delta_ms`/`delta_secs` naming in GameController, CWD-dependent
        paths, add a type checker, grow the pytest suite for pure logic (input-system,
-       serial-protocol, and DMX suites landed 2026-07 — 48 tests), festival
-       `config.toml`, README rewrite
+       serial-protocol, DMX, sound suites landed 2026-07 — 77 tests), festival
+       `config.toml`, README rewrite. From the PR #29 reviews: extract the
+       reconnect/rate-limited-log idiom now hand-rolled three times (serial, DMX,
+       JACK controllers), and move the TTY guard from KeyboardInputSystem into
+       KBHit where the termios dependency lives
 
 ## Assets repo (sound banks)
 
