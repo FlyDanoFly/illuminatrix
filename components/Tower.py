@@ -19,6 +19,8 @@ class Tower:
         self._light_system.set(self._tower_enum, color, light)
 
     def play_sound(self, sound, volume: float = 1.0, num_loops: int = 0) -> Sound:
+        """Always a Sound: one that couldn't start (unknown key, mixer
+        down) comes back already finished, so is_done() gates just work."""
         return self._sound_system.play(sound, [self._tower_enum], volume, num_loops)
 
     def is_switch_pressed(self) -> bool:

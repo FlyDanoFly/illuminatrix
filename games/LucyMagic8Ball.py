@@ -9,10 +9,12 @@ logger = logging.getLogger(__name__)
 
 
 class LucyMagic8Ball(BaseGame):
+    SOUND_BANK = "sound_banks/lucy_magic_8_ball"
+
     def __init__(self, tower_controller: TowerController):
         super().__init__()
         self._towers = tower_controller
-        self._towers.load_sound_bank("sound_banks/lucy_magic_8_ball/")
+        self._towers.load_sound_bank(self.SOUND_BANK)
 
         self.light_elapsed_time = 0.0
         self.dark_elapsed_time = 0.0

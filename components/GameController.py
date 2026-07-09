@@ -36,6 +36,10 @@ class GameController(StateMachineMixin, StateMachine):
     While the game is going, only the reset butten is active. If it is pressed
     for x time it will stop the current game and go back to await input mode.
     """
+    # The selection/instructions sounds are the controller's own bank,
+    # not any game's; play.py includes it in the boot preload
+    INTRO_SOUND_BANK = "sound_banks/intro_and_instructions"
+
     initial_state = State("initial_state", initial=True)
     await_input = State("await_input")
     instructions = State("instructions")
@@ -55,6 +59,7 @@ class GameController(StateMachineMixin, StateMachine):
         tower_controller: TowerController,
         game_classes: Sequence[type[BaseGame]],
         ambient_class: type[BaseGame],
+        select_idle_timeout_secs: float = GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS,
     ):
         """
         Args
@@ -80,6 +85,7 @@ class GameController(StateMachineMixin, StateMachine):
 
         self._game_idle_secs: float = 0.0
         self._controller_input_idle_secs: float = 0.0
+        self._select_idle_timeout_secs: float = select_idle_timeout_secs
 
         # Special case: if there is only one game passed in just use that, don't choose
         if len(game_classes) == 1:
@@ -96,7 +102,7 @@ class GameController(StateMachineMixin, StateMachine):
         self._towers.set_color(WHITE)
         self._game_cycler = cycle(self._game_classes)
         self._selected_game = self._game_cycler.__next__()
-        self._towers.load_sound_bank("sound_banks/intro_and_instructions")
+        self._towers.load_sound_bank(self.INTRO_SOUND_BANK)
 
     # ------------------------------------------------------------
     # State: await_input
@@ -112,7 +118,7 @@ class GameController(StateMachineMixin, StateMachine):
             self._controller_input_idle_secs = 0.0
         else:
             self._controller_input_idle_secs += delta_secs
-            if self._controller_input_idle_secs > GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS:
+            if self._controller_input_idle_secs > self._select_idle_timeout_secs:
                 self._selected_game = self._ambient_class
                 self.start_game()
                 return
@@ -129,7 +135,7 @@ class GameController(StateMachineMixin, StateMachine):
     def on_enter_instructions(self) -> None:
         self._towers.play_sound(f"{self._selected_game.__name__}__instructions", volume=0.25)
 
-    def do_instructions(self, delta_ms: float) -> ShouldStop:
+    def do_instructions(self, delta_secs: float) -> ShouldStop:
         if self._towers.are_any_sounds_playing():
             # Presume it is playing the instructions or finishing the game, skip
             time.sleep(0.01)
@@ -147,13 +153,13 @@ class GameController(StateMachineMixin, StateMachine):
 
         self._game_idle_secs = 0.0
 
-    def do_playing_game(self, delta_ms: float) -> ShouldStop:
+    def do_playing_game(self, delta_secs: float) -> ShouldStop:
         is_done = False
 
         if self._towers.is_any_switch_pressed():
             self._game_idle_secs = 0.0
         else:
-            self._game_idle_secs += delta_ms
+            self._game_idle_secs += delta_secs
             if self._game_idle_secs > GAME_CONTROLLER_GAME_IDLE_TIMEOUT_SECS:
                 self.cancel_game()
                 return
@@ -167,7 +173,7 @@ class GameController(StateMachineMixin, StateMachine):
                 # If the user presses any button in ambient mode, go to selection mode 
                 is_done = True
         else:
-            is_done = self._current_game.update(delta_ms)
+            is_done = self._current_game.update(delta_secs)
 
         if self._single_game:
             # Single game, can exit the program

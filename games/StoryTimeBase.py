@@ -28,7 +28,7 @@ class StoryTimeBase(BaseStateMachineGame):
 
     # These should be overridden in the derived class
     STORY_SPEC_CSV: str = ""
-    STORY_SOUND_BANK: str = ""
+    SOUND_BANK: str | None = None
 
     # Game states
     start = State("Start", initial=True)
@@ -53,7 +53,7 @@ class StoryTimeBase(BaseStateMachineGame):
         # self.towers_in_use, self.story = self._read_file("sound_banks/story_time/gremoryland/Story mode_ Stories - GremoryLand (Sonya - in progress).csv")
 
         self._towers = tower_controller
-        self._towers.load_sound_bank(self.STORY_SOUND_BANK)
+        self._towers.load_sound_bank(self.SOUND_BANK)
         # self._towers.load_sound_bank("sound_banks/story_time/gremoryland")
 
         self._tower_color_low = dict(zip(tower_controller, DULL_RAINBOW, strict=True))
@@ -228,7 +228,10 @@ class StoryTimeBase(BaseStateMachineGame):
         logger.info("Speaking: %s", text)
 
     def do_speaking(self, delta_secs: float) -> ShouldStop:
-        if self.sound_playing and self.sound_playing.is_done():
+        # play_sound always returns a Sound (failures come back already
+        # finished); the None check only covers this attribute's initial
+        # state, not the play contract
+        if self.sound_playing is None or self.sound_playing.is_done():
             self.start_pause()
             self.effect.finish()
 

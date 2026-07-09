@@ -8,10 +8,12 @@ logger = logging.getLogger(__name__)
 
 
 class Music(BaseGame):
+    SOUND_BANK = "sound_banks/music"
+
     def __init__(self, tower_controller: TowerController):
         super().__init__()
         self._towers = tower_controller
-        self._towers.load_sound_bank("sound_banks/music/")
+        self._towers.load_sound_bank(self.SOUND_BANK)
 
         self.elapsed_time = 0.0
         self.fade_time = 0.1

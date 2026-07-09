@@ -16,12 +16,14 @@ COLOR_CYCLE_FADE_IN_TIME_SEC = 15.5
 COLOR_CYCLE_SUSTAIN_TIME_SEC = 0.0
 
 class ColorCycle(BaseGame):
+    SOUND_BANK = "sound_banks/ambient"
+
     def __init__(self, tower_controller: TowerController) -> None:
         self._towers = tower_controller
         self.start_hue = 0.0
         self.hue_tower_step = 1.0 / len(TowerEnum)
         self.hertz = HERTZ
-        self._towers.load_sound_bank("sound_banks/ambient")
+        self._towers.load_sound_bank(self.SOUND_BANK)
 
     def first_frame_update(self) -> None:
         self.update(0.0)

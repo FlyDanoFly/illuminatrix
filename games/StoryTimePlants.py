@@ -6,4 +6,4 @@ class StoryTimePlants(StoryTimeBase):
     PROXY = False
 
     STORY_SPEC_CSV: str = "sound_banks/story_time/plants/Story mode_ Stories - Plants.csv"
-    STORY_SOUND_BANK: str = "sound_banks/story_time/plants"
+    SOUND_BANK: str = "sound_banks/story_time/plants"

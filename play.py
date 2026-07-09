@@ -7,7 +7,10 @@ from copy import copy
 from pprint import pprint
 
 from bases.BaseSystem import BaseSystem
-from components.GameController import GameController
+from components.GameController import (
+    GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS,
+    GameController,
+)
 from components.TowerController import TowerController
 from constants.constants import (
     ENVIRONMENT_CONTEXT,
@@ -15,6 +18,7 @@ from constants.constants import (
     TowerEnum,
 )
 from managers.ManagerSingletonFactory import ManagerSingletonFactory
+from systems.concrete.NullSoundSystem import NullSoundSystem
 from systems.SystemSingletonFactory import SystemSingletonFactory
 from utils import find_game_classes
 
@@ -68,11 +72,25 @@ def main():
 
     parser.add_argument("--allgames", default=False, action="store_true", help="make all games available, not just production games")
 
-    parser.add_argument("--debug", action="append", default=[], metavar="LOGGER", help="set the named logger to DEBUG, e.g. systems.concrete.SwitchInputSystem (repeatable; '' debugs everything)")
+    parser.add_argument("--debug", action="append", default=[], metavar="LOGGER", help="set the named logger to DEBUG (repeatable; '' debugs everything; see --list-loggers for names)")
+
+    parser.add_argument("--list-loggers", action="store_true", help="print the logger names available to --debug and exit")
+
+    parser.add_argument("--no-sound", action="store_true", help="disable audio entirely (no JACK server needed)")
+
+    parser.add_argument("--ambient-idle-secs", type=float, default=GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS, help="seconds without input in selection mode before dropping to the ambient game")
 
     parser.add_argument("games", nargs="*", choices=sorted(available_games.keys()), help="game to run")
 
     options = parser.parse_args()
+
+    if options.list_loggers:
+        # Everything is imported by now, so the registry is complete.
+        # Before the --debug loop: getLogger() CREATES missing loggers,
+        # so listing afterwards would show a typo'd --debug name as real
+        for name in sorted(logging.Logger.manager.loggerDict):
+            print(name)
+        return
 
     for logger_name in options.debug:
         logging.getLogger(logger_name).setLevel(logging.DEBUG)
@@ -97,9 +115,24 @@ def main():
             parser.error("running a web simulation requires --id")
         context["light_system"]["client_id"] = options.id
 
+    # All games are available unless a subset is specified on the command
+    # line. Validated before any system starts up, so a typo'd game name
+    # doesn't leave started systems behind
+    games_to_play = available_games.values()
+    if options.games:
+        games_to_play = {v for v in available_games.values() if v.__name__ in options.games}
+
+    if not games_to_play:
+        print("No games selected, did you mean to specify --allgames?")
+        return
+
     # Instantiate the systems; the factory owns the per-frame update
     # order (transports first, then the systems)
-    systems = SystemSingletonFactory(options.environment, context)
+    systems = SystemSingletonFactory(
+        options.environment,
+        context,
+        sound_system_override=NullSoundSystem if options.no_sound else None,
+    )
     active_systems: list[BaseSystem] = systems.get_active_systems()
 
     managers: ManagerSingletonFactory = ManagerSingletonFactory(systems)
@@ -111,11 +144,6 @@ def main():
     # TODO: this might pop, black will be better for production
     tower_controller.set_color((1.0, 1.0, 1.0))
 
-    # Uncomment to see all the logger names available to --debug
-    # logger_dict = logging.Logger.manager.loggerDict
-    # for name in logger_dict:
-    #     print("-->", name)
-
     # Start the systems
     for system in active_systems:
         system.startup()
@@ -123,17 +151,28 @@ def main():
     for manager in active_managers:
         manager.startup()
 
-    print("Sleep 2 to warmup to wait for the serial system to init")
-    time.sleep(2)
+    # The serial controller needs a moment after startup before real
+    # traffic; the bank preload below takes seconds anyway, so it counts
+    # toward the warmup and only the shortfall is slept
+    SERIAL_WARMUP_SECS = 2.0
+    warmup_start_secs = time.monotonic()
 
-    # All games are available unless a subset is specificed on the command line
-    games_to_play = available_games.values()
-    if options.games:
-        games_to_play = {v for v in available_games.values() if v.__name__ in options.games}
+    # Preload every sound bank this run's games declare (plus the game
+    # controller's own selection sounds), so entering a game switches
+    # banks from cache instead of stalling the loop on a multi-second
+    # decode — the ambient bank measured 4.3s
+    sound_banks = {
+        game.SOUND_BANK
+        for game in [*games_to_play, ambient_game]
+        if game.SOUND_BANK
+    }
+    sound_banks.add(GameController.INTRO_SOUND_BANK)
+    systems.get_sound_system().preload_sound_banks(sorted(sound_banks))
 
-    if not games_to_play:
-        print("No games selected, did you mean to specify --allgames?")
-        return
+    warmup_remaining_secs = SERIAL_WARMUP_SECS - (time.monotonic() - warmup_start_secs)
+    if warmup_remaining_secs > 0:
+        print(f"Sleeping {warmup_remaining_secs:.1f}s to finish the serial warmup")
+        time.sleep(warmup_remaining_secs)
 
     game_controller = GameController(
         systems,
@@ -141,6 +180,7 @@ def main():
         tower_controller,
         list(games_to_play),
         ambient_game,
+        select_idle_timeout_secs=options.ambient_idle_secs,
     )
 
     # A frame that blows way past the ~33ms budget is a stall; warn with the

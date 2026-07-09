@@ -5,9 +5,8 @@ from bases.SoundSystem import SoundSystem
 from constants.constants import Environment
 from systems.concrete.dmx_controller import DmxController
 from systems.concrete.EmbeddedLightSystem import EmbeddedLightSystem
-from systems.concrete.JackSoundSystem import JackSoundSystem
+from systems.concrete.JackSoundSystem import JackMixer, JackSoundSystem
 from systems.concrete.KeyboardInputSystem import KeyboardInputSystem
-from systems.concrete.PrintInputSystem import PrintInputSystem
 from systems.concrete.PrintLightSystem import PrintLightSystem
 from systems.concrete.PrintSoundSystem import PrintSoundSystem
 from systems.concrete.serial_controller import SerialController
@@ -30,7 +29,9 @@ class SystemSingletonFactory:
     INPUT_SYSTEM_MAP: dict[Environment, type[InputSystem]] = {
         Environment.EMBEDDED: SwitchInputSystem,
         Environment.WEB: KeyboardInputSystem,
-        Environment.PRINT: PrintInputSystem,
+        # Keys 1-7 are the towers; enter/space/esc the controller buttons.
+        # Degrades to no input when stdin is not a TTY
+        Environment.PRINT: KeyboardInputSystem,
     }
 
     _light_system: LightSystem
@@ -38,7 +39,12 @@ class SystemSingletonFactory:
     _input_system: InputSystem
     _active_systems: list[BaseSystem]
 
-    def __init__(self, mode: Environment, context: dict):
+    def __init__(
+            self,
+            mode: Environment,
+            context: dict,
+            sound_system_override: type[SoundSystem] | None = None,
+    ):
         self.mode: Environment = mode
         self.context: dict = context or {}
 
@@ -51,20 +57,26 @@ class SystemSingletonFactory:
 
         input_kwargs = dict(self.context["input_system"])
         input_system = SystemSingletonFactory.INPUT_SYSTEM_MAP[self.mode]
-        if input_system is SwitchInputSystem:
+        if issubclass(input_system, SwitchInputSystem):
             serial_controller = SerialController(**input_kwargs.pop("serial_controller", {}))
             input_kwargs["serial_controller"] = serial_controller
         self._input_system = input_system(**input_kwargs)
 
         light_kwargs = dict(self.context["light_system"])
         light_system = SystemSingletonFactory.LIGHT_SYSTEM_MAP[self.mode]
-        if light_system is EmbeddedLightSystem:
+        if issubclass(light_system, EmbeddedLightSystem):
             light_kwargs["dmx_controller"] = DmxController(**light_kwargs.pop("dmx_controller", {}))
             light_kwargs["serial_controller"] = serial_controller
         self._light_system = light_system(**light_kwargs)
 
-        sound_system = SystemSingletonFactory.SOUND_SYSTEM_MAP[self.mode]
-        self._sound_system = sound_system(**self.context["sound_system"])
+        sound_kwargs = dict(self.context["sound_system"])
+        sound_system = sound_system_override or SystemSingletonFactory.SOUND_SYSTEM_MAP[self.mode]
+        # Popped unconditionally: the mixer config is JACK transport
+        # detail, meaningless to an overridden (e.g. --no-sound) system
+        mixer_config = sound_kwargs.pop("mixer", {})
+        if issubclass(sound_system, JackSoundSystem):
+            sound_kwargs["mixer"] = JackMixer(**mixer_config)
+        self._sound_system = sound_system(**sound_kwargs)
 
         # Everything the game loop drives each frame, in update order.
         # The serial transport goes first: its exchange sends the colors
