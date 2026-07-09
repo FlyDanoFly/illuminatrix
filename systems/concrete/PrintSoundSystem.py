@@ -31,7 +31,7 @@ class PrintSoundSystem(SoundSystem):
     def load_sound_bank(self, path: str) -> None:
         print(f"PrintSoundSystem: Loading sound bank {path}")
 
-    def play(self, sound: str, tower_enums: list[TowerEnum] | None = None, volume: float = 1.0, num_loops: int = 0) -> Sound | None:
+    def play(self, sound: str, tower_enums: list[TowerEnum] | None = None, volume: float = 1.0, num_loops: int = 0) -> Sound:
         print(f"PrintSoundSystem: Playing {sound} on towers {tower_enums} at volume {volume}, {num_loops} loops")
         return PrintSound(sound)
 

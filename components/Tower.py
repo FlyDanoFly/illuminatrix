@@ -18,9 +18,9 @@ class Tower:
     def set_color(self, color: ColorType, light: LightPos = LightPos.All):
         self._light_system.set(self._tower_enum, color, light)
 
-    def play_sound(self, sound, volume: float = 1.0, num_loops: int = 0) -> Sound | None:
-        """None when the sound is unknown or was dropped (JACK down) —
-        callers gating on the result must treat None as already done."""
+    def play_sound(self, sound, volume: float = 1.0, num_loops: int = 0) -> Sound:
+        """Always a Sound: one that couldn't start (unknown key, mixer
+        down) comes back already finished, so is_done() gates just work."""
         return self._sound_system.play(sound, [self._tower_enum], volume, num_loops)
 
     def is_switch_pressed(self) -> bool:

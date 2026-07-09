@@ -228,9 +228,9 @@ class StoryTimeBase(BaseStateMachineGame):
         logger.info("Speaking: %s", text)
 
     def do_speaking(self, delta_secs: float) -> ShouldStop:
-        # None means the sound never started (unknown key, or the mixer
-        # dropped it while JACK is down) — treat it as finished so the
-        # story keeps moving instead of wedging on this beat
+        # play_sound always returns a Sound (failures come back already
+        # finished); the None check only covers this attribute's initial
+        # state, not the play contract
         if self.sound_playing is None or self.sound_playing.is_done():
             self.start_pause()
             self.effect.finish()

@@ -179,9 +179,11 @@ def test_zero_physical_ports_counts_as_disconnected():
     assert len(mixer.outports) == 7
 
 
-def test_dropped_play_reports_false_and_sound_system_returns_none():
+def test_dropped_play_returns_an_already_finished_sound():
     # Regression: a Sound the mixer dropped while DISCONNECTED was still
-    # returned to games, whose is_done() gates then wedged forever
+    # returned to games, whose is_done() gates then wedged forever. The
+    # contract: play() always returns a Sound, and one that couldn't
+    # start is born finished
     import numpy
 
     from systems.concrete.JackSoundSystem import JackSoundSystem, SoundData, SoundType
@@ -195,13 +197,17 @@ def test_dropped_play_reports_false_and_sound_system_returns_none():
         key="boom", filename="boom.wav", sound_type=SoundType.SOUND,
         data=numpy.ones(10, dtype=numpy.float32), samplerate=1000,
     )}
-    assert system.play("boom") is None, "dropped sounds must not reach game gates"
+    dropped = system.play("boom")
+    assert dropped.is_done(), "a dropped sound is born finished, no None guard needed"
+    unknown = system.play("not_in_the_bank")
+    assert unknown.is_done(), "an unknown sound is born finished too"
 
     fake.server_present = True
     bypass_rate_limit(mixer)
     mixer.update()
-    snd = system.play("boom")
-    assert snd is not None and mixer.play(make_sound(), [TowerEnum.Tower_1]) is True
+    live = system.play("boom")
+    assert not live.is_done(), "a genuinely enqueued sound is not born finished"
+    assert mixer.play(make_sound(), [TowerEnum.Tower_1]) is True
 
 
 def test_shutdown_is_safe_from_any_state_and_idempotent():

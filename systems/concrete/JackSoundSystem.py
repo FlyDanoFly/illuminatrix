@@ -18,7 +18,7 @@ import json5
 import numpy
 import soundfile
 
-from bases.SoundSystem import Sound, SoundSystem
+from bases.SoundSystem import NullSound, Sound, SoundSystem
 from constants.constants import TowerEnum
 
 logger = logging.getLogger(__name__)
@@ -104,11 +104,11 @@ def load_sound_bank(directory: str) -> dict[str, SoundData]:
                     sound_type = SoundType.SOUND
 
                 # TODO: add support for other sound types, for now load everything as 'sound'
-                file_start_secs = time.perf_counter()
+                file_start_secs = time.monotonic()
                 data, samplerate = load_sound_file(full_path)
                 logger.debug(
                     "Loaded %s (%.1fs of audio) in %.2fs",
-                    full_path, len(data) / samplerate, time.perf_counter() - file_start_secs,
+                    full_path, len(data) / samplerate, time.monotonic() - file_start_secs,
                 )
                 sound_bank[name] = SoundData(
                     key=name,
@@ -316,6 +316,12 @@ class JackMixer:
         with self.lock:
             still_playing = []
             for sound, channel_map in self.active_sounds:
+                # Never mix a finished sound. This is the invariant the
+                # per-Sound guards (born-complete empty data, stop()
+                # zeroing loops) defend in depth; checking here keeps a
+                # future Sound state from rediscovering it the hard way
+                if sound.is_done():
+                    continue
                 sound.mix_into(output_buffers, channel_map)
                 if not sound.is_done():
                     still_playing.append((sound, channel_map))
@@ -489,7 +495,7 @@ class JackSoundSystem(SoundSystem):
         derives the list from the run's games' SOUND_BANK declarations,
         so a game's own load_sound_bank ask becomes a switch instead of
         seconds of frozen loop."""
-        start_secs = time.perf_counter()
+        start_secs = time.monotonic()
         for path in paths:
             try:
                 self._load_bank_cached(path)
@@ -499,7 +505,7 @@ class JackSoundSystem(SoundSystem):
                 logger.exception("Failed to preload sound bank %s", path)
         logger.info(
             "Preloaded %d sound banks in %.1fs",
-            len(self._bank_cache), time.perf_counter() - start_secs,
+            len(self._bank_cache), time.monotonic() - start_secs,
         )
 
     def shutdown(self) -> None:
@@ -540,9 +546,9 @@ class JackSoundSystem(SoundSystem):
             logger.debug("Sound bank %s served from cache", path)
             return cached
         logger.info("Loading sound bank from %s", path)
-        start_secs = time.perf_counter()
+        start_secs = time.monotonic()
         bank = load_sound_bank(path)
-        elapsed_secs = time.perf_counter() - start_secs
+        elapsed_secs = time.monotonic() - start_secs
         audio_secs = sum(len(sd.data) / sd.samplerate for sd in bank.values())
         logger.info(
             "Loaded sound bank %s: %d sounds, %.1fs of audio, in %.2fs",
@@ -556,18 +562,20 @@ class JackSoundSystem(SoundSystem):
             sound: str,
             tower_enums: list[TowerEnum] | None = None,
             volume: float = 1.0,
-            num_loops: int = 0) -> Sound | None:
-        """Play a sound from the sound bank."""
+            num_loops: int = 0) -> Sound:
+        """Play a sound from the sound bank. Always returns a Sound: on
+        failure (unknown key, mixer down) an already-finished NullSound,
+        so game code gating on is_done() moves on without None guards."""
         if sound not in self.sound_bank:
             logger.warning("Sound %s not found in sound bank", sound)
-            return None
+            return NullSound()
         play_on_tower_enums: list[TowerEnum] = tower_enums or list(TowerEnum)
         sound_data = self.sound_bank[sound]
         snd = sound_data.create_sound(volume=volume, num_loops=num_loops)
         if not self.mixer.play(snd, play_on_tower_enums):
-            # Dropped (JACK disconnected): games gating on is_done() must
-            # get None, not a Sound that will never finish
-            return None
+            # Dropped (JACK disconnected): a Sound the mixer never
+            # advances would report is_done() False forever
+            return NullSound()
         return snd
 
     def stop_all(self, fade_secs: float = 0.25):

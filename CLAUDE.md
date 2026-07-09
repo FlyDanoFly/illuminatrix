@@ -52,8 +52,9 @@ live installation Pi itself.
 - Degrade, don't crash: missing hardware costs its subsystem, never the
   process. Self-heal from `update()` with rate-limited reconnects, and
   repeat an ERROR every ~30s while degraded so the journal shows it.
-- A dropped/failed sound returns `None` (or an already-done Sound) —
-  never an object whose `is_done()` can't come true; games gate on it.
+- `play()` always returns a `Sound`; failures (unknown key, mixer down)
+  return an already-finished `NullSound` — never `None` the caller must
+  guard, and never an object whose `is_done()` can't come true.
 - `JackSound.mix_into` and `JackMixer.process` run on the JACK realtime
   thread: no logging, minimal allocation, and they must never block or
   loop unboundedly.
