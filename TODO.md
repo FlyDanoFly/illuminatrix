@@ -84,7 +84,7 @@ hash lives under Reference below). The firmware/Pi deploy note moved to In fligh
 4. [x] `JackSound.mix_into` bug — fixed 2026-07-07 on `sound-system-review`: the
        block and fade segment are computed once per callback and mixed identically
        into every mapped channel, with regression tests (`tests/test_jack_sound.py`)
-5. [ ] Cleanup pass: `delta_ms`/`delta_secs` naming in GameController, CWD-dependent
+5. [ ] Cleanup pass: CWD-dependent
        paths, add a type checker, grow the pytest suite for pure logic (input-system,
        serial-protocol, DMX, sound suites landed 2026-07 — 77 tests), festival
        `config.toml`, README rewrite. From the PR #29 reviews: extract the
