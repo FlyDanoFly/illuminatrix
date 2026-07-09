@@ -10,7 +10,7 @@ class NullSound(Sound):
     def is_done(self) -> bool:
         return True
 
-    def start_fade_out(self, duration_sec: float) -> None:
+    def start_fade_out(self, fade_secs: float) -> None:
         pass
 
     def stop(self) -> None:

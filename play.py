@@ -84,14 +84,16 @@ def main():
 
     options = parser.parse_args()
 
-    for logger_name in options.debug:
-        logging.getLogger(logger_name).setLevel(logging.DEBUG)
-
     if options.list_loggers:
-        # Everything is imported by now, so the registry is complete
+        # Everything is imported by now, so the registry is complete.
+        # Before the --debug loop: getLogger() CREATES missing loggers,
+        # so listing afterwards would show a typo'd --debug name as real
         for name in sorted(logging.Logger.manager.loggerDict):
             print(name)
         return
+
+    for logger_name in options.debug:
+        logging.getLogger(logger_name).setLevel(logging.DEBUG)
 
     # Get the ambient game out of the available games
     ambient_game = available_games[AMBIENT_GAME]

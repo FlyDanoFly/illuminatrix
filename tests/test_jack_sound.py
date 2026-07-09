@@ -158,6 +158,24 @@ def test_fade_restart_continues_from_current_amplitude():
         "restarted fade begins near the current amplitude, not full volume"
 
 
+def test_zero_duration_fade_then_refade_does_not_crash():
+    # Regression: a fade shorter than one sample leaves an empty active
+    # curve; a second overlapping fade then indexed the empty array
+    snd = make_sound()
+    snd.start_fade_out(0.0)
+    snd.start_fade_out(1.0)  # must not raise
+    bufs = make_buffers(frames=50)
+    snd.mix_into(bufs, [TowerEnum.Tower_1])
+    assert abs(bufs[0][0] - 1.0) < 0.01, "refade starts from the sound's volume"
+
+
+def test_zero_duration_fade_alone_completes_next_callback():
+    snd = make_sound()
+    snd.start_fade_out(0.0)
+    snd.mix_into(make_buffers(), [TowerEnum.Tower_1])
+    assert snd.is_done(), "an empty curve exhausts immediately"
+
+
 def test_towers_beyond_output_count_are_skipped():
     # Stereo fallback: 2 physical ports, sound mapped to all 7 towers
     snd = make_sound()

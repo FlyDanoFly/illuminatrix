@@ -13,8 +13,8 @@ class PrintSound(Sound):
     def is_done(self) -> bool:
         return True
 
-    def start_fade_out(self, duration_sec: float) -> None:
-        print(f"PrintSound: fading out {self.name} over {duration_sec}s")
+    def start_fade_out(self, fade_secs: float) -> None:
+        print(f"PrintSound: fading out {self.name} over {fade_secs}s")
 
     def stop(self) -> None:
         print(f"PrintSound: stopping {self.name}")

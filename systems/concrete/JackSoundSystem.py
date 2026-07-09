@@ -184,17 +184,19 @@ class JackSound(Sound):
             return False
         return self.position >= len(self.data)
 
-    def start_fade_out(self, duration_sec: float) -> None:
+    def start_fade_out(self, fade_secs: float) -> None:
         if self.fade_out_complete:
             return
         # Restarting mid-fade begins the new curve at the current
         # amplitude, not full volume — a reset to full is an audible pop
-        # (e.g. a game's 0.25s stop_all overlapped by shutdown's 1s one)
-        if self.fade_out_active:
+        # (e.g. a game's 0.25s stop_all overlapped by shutdown's 1s one).
+        # The len guard matters: a zero-frame fade (fade_secs < one
+        # sample) leaves an empty active curve, and indexing it crashes
+        if self.fade_out_active and len(self.fade_out_curve) > 0:
             start_amplitude = self.fade_out_curve[min(self.fade_out_index, len(self.fade_out_curve) - 1)]
         else:
             start_amplitude = self.volume
-        total_frames = int(duration_sec * self.samplerate)
+        total_frames = int(fade_secs * self.samplerate)
         self.fade_out_curve = numpy.linspace(start_amplitude, 0.0, total_frames, dtype=numpy.float32)
         self.fade_out_index = 0
         self.fade_out_active = True
@@ -255,7 +257,9 @@ class JackSound(Sound):
         elif self.volume != 1.0:
             # At unity volume block stays a read-only view of self.data —
             # skipping the multiply avoids a per-callback array allocation
-            # on the JACK realtime thread
+            # on the JACK realtime thread. NEVER mutate block in place:
+            # self.data is the bank-cache array shared by every play of
+            # this sound, so `block *= x` would corrupt the cached audio
             block = block * self.volume
 
         for target_channel in (tower_enum.value - 1 for tower_enum in channel_map):
