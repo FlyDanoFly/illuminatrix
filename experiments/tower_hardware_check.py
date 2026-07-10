@@ -32,6 +32,10 @@ from systems.concrete.serial_controller import SerialController  # noqa: E402
 from utils import hsv_to_rgb  # noqa: E402
 
 SOUND_BANK = "sound_banks/test"
+# Opening the serial port resets the pad controller (DTR toggle), and
+# traffic during its boot window can wedge it in the bootloader — pads
+# dark, switches dead. play.py observes the same quiet period
+SERIAL_WARMUP_SECS = 2.0
 SLOT_SECS = 2.0  # each tower's turn: one spoken number, tower-number pulses
 LOW_INTENSITY = 1.0 / 3.0  # pulse trough, as a fraction of the tower's full color
 DOWN_TO_UP_RATIO = 1.0 / 3.0  # each low segment vs. the highs it separates
@@ -66,7 +70,14 @@ def main() -> None:
     sound.startup()
 
     try:
+        # The bank load counts toward the warmup, like play.py's preload
+        warmup_start_secs = time.monotonic()
         sound.load_sound_bank(SOUND_BANK)
+        warmup_remaining_secs = SERIAL_WARMUP_SECS - (time.monotonic() - warmup_start_secs)
+        if warmup_remaining_secs > 0:
+            print(f"Sleeping {warmup_remaining_secs:.1f}s to finish the serial warmup")
+            time.sleep(warmup_remaining_secs)
+
         print("Each tower in turn says its number and pulses that many")
         print("times (tower 1 stays solid). Colors run red around the")
         print("wheel from tower 1. ^C to quit.")
