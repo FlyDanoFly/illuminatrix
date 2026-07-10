@@ -151,12 +151,6 @@ def main():
     for manager in active_managers:
         manager.startup()
 
-    # The serial controller needs a moment after startup before real
-    # traffic; the bank preload below takes seconds anyway, so it counts
-    # toward the warmup and only the shortfall is slept
-    SERIAL_WARMUP_SECS = 2.0
-    warmup_start_secs = time.monotonic()
-
     # Preload every sound bank this run's games declare (plus the game
     # controller's own selection sounds), so entering a game switches
     # banks from cache instead of stalling the loop on a multi-second
@@ -168,11 +162,9 @@ def main():
     }
     sound_banks.add(GameController.INTRO_SOUND_BANK)
     systems.get_sound_system().preload_sound_banks(sorted(sound_banks))
-
-    warmup_remaining_secs = SERIAL_WARMUP_SECS - (time.monotonic() - warmup_start_secs)
-    if warmup_remaining_secs > 0:
-        print(f"Sleeping {warmup_remaining_secs:.1f}s to finish the serial warmup")
-        time.sleep(warmup_remaining_secs)
+    # No serial warmup here: SerialController holds its own boot-quiet
+    # window after connect, riding the disconnect degrade path — with a
+    # multi-second preload it has usually expired before the first frame
 
     game_controller = GameController(
         systems,

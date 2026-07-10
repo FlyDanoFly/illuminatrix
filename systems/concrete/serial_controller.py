@@ -2,8 +2,8 @@
 
 One physical peripheral serving two logical roles: a light sink (7 pad
 RGBs + 3 control-LED bytes down) and an input source (switch bits up).
-This module owns the wire — framing, CRC, reconnect, stale detection —
-and nothing game-facing. SwitchInputSystem reads switches through it;
+This module owns the wire — framing, CRC, reconnect, the post-connect
+boot-quiet window, stale detection — and nothing game-facing. SwitchInputSystem reads switches through it;
 EmbeddedLightSystem writes pad colors into it.
 
 The transport rides the game loop as a system in its own right:
@@ -47,6 +47,13 @@ SERIAL_WRITE_TIMEOUT_SECS = 0.1
 RESPONSE_FRAME_SIZE = 4
 # Minimum time between attempts to (re)open the serial port
 SERIAL_RECONNECT_INTERVAL_SECS = 1.0
+# Opening the port DTR-resets the controller, and frames sent while it
+# boots can land in its bootloader and wedge it — pads dark, switches
+# dead, no error anywhere. Exchanges stay suppressed this long after
+# every (re)connect
+SERIAL_WARMUP_SECS = 2.0
+# Poll cadence for wait_until_ready()
+SERIAL_READY_POLL_SECS = 0.05
 # After this long without a valid response the last known switch state is
 # no longer trustworthy; consumers should treat switches as released
 SERIAL_STALE_STATE_SECS = 2.0
@@ -109,6 +116,7 @@ class SerialController(BaseSystem):
         self._latest_pressed: set[TowerEnum | ControllerSwitchEnum] | None = None
         self._serial: serial.Serial | None = None
         self._rx_buffer: bytearray = bytearray()
+        self._connected_secs: float = float("-inf")
         self._last_connect_attempt_secs: float = float("-inf")
         self._last_valid_response_secs: float = float("-inf")
         self._last_disconnected_log_secs: float = float("-inf")
@@ -162,6 +170,31 @@ class SerialController(BaseSystem):
         self._control_leds[controller_switch_enum.value - 1] = brightness
 
     @property
+    def is_ready(self) -> bool:
+        """True once the port is open and the controller has had its
+        boot-quiet window (SERIAL_WARMUP_SECS after connect). Until then
+        update() exchanges nothing and switches read released, the same
+        degrade as a brief disconnect."""
+        return (
+            self._serial is not None
+            and time.monotonic() - self._connected_secs >= SERIAL_WARMUP_SECS
+        )
+
+    def wait_until_ready(self) -> None:
+        """Block until is_ready, retrying the connection meanwhile — for
+        bench scripts that must not start until the pads are live (a
+        stomp check that began during the boot-quiet window would read
+        as a dead pad). The game loop must never call this: it rides the
+        degrade path through update() instead. ^C escapes; a missing
+        controller repeats the usual disconnected ERROR while we wait."""
+        while not self.is_ready:
+            if self._serial is None:
+                self._try_connect()
+                if self._serial is None:
+                    self._log_disconnected()
+            time.sleep(SERIAL_READY_POLL_SECS)
+
+    @property
     def is_stale(self) -> bool:
         """True when no valid response has arrived for long enough that the
         last known switch state is no longer trustworthy."""
@@ -179,6 +212,11 @@ class SerialController(BaseSystem):
             if self._serial is None:
                 self._log_disconnected()
                 return None
+
+        if not self.is_ready:
+            # Boot-quiet window: the controller is still rebooting from
+            # the DTR reset the open caused; see SERIAL_WARMUP_SECS
+            return None
 
         rgb_data = [
             channel
@@ -248,6 +286,9 @@ class SerialController(BaseSystem):
             )
             self._serial.reset_input_buffer()
             self._rx_buffer.clear()
+            # Starts the boot-quiet window: the open just DTR-reset the
+            # controller, so exchanges hold off while it boots
+            self._connected_secs = time.monotonic()
             # Reset so a future outage logs immediately again
             self._last_disconnected_log_secs = float("-inf")
             logger.info("Serial connection to %s established", self._port)
