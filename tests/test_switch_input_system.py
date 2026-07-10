@@ -91,12 +91,20 @@ def tick(system: SwitchInputSystem, delta_secs: float = DT) -> None:
     system.update(delta_secs)
 
 
+def warm(controller: SerialController) -> None:
+    """Step the controller past the post-connect boot-quiet window, the
+    way real elapsed time would."""
+    controller._connected_secs = time.monotonic() - (sc_mod.SERIAL_WARMUP_SECS + 1)
+
+
 def make_system() -> tuple[SwitchInputSystem, FakeSerial]:
-    """A connected system on a fresh fake port."""
+    """A connected system on a fresh fake port, past the boot-quiet
+    window so exchanges flow."""
     fake = patch_serial()
     system = SwitchInputSystem(serial_controller=SerialController(serial_port="/dev/null"))
     system.startup()
     assert system.serial_controller._serial is fake
+    warm(system.serial_controller)
     return system, fake
 
 
@@ -271,8 +279,9 @@ def test_io_error_reconnects_rate_limited():
     assert system.serial_controller._serial is None, "reconnect is rate-limited"
     system.serial_controller._last_connect_attempt_secs = time.monotonic() - (sc_mod.SERIAL_RECONNECT_INTERVAL_SECS + 1)
     fake.rx.clear()
-    tick(system)  # reconnects and sends a request
+    tick(system)  # reconnects; the fresh boot-quiet window holds traffic
     assert system.serial_controller._serial is fake
+    warm(system.serial_controller)
     fake.feed(framed(0b10, 0))
     tick(system)
     assert system.is_tower_switch_pressed(TowerEnum.Tower_2)
@@ -291,6 +300,48 @@ def test_missing_port_degrades_gracefully():
     assert system.serial_controller._serial is None
     tick(system)  # must not raise
     assert not system.is_tower_switch_pressed(TowerEnum.Tower_1)
+
+
+# ---------------------------------------------------------------------------
+# Boot-quiet window (opening the port DTR-resets the controller; frames
+# sent while it boots can wedge its bootloader)
+
+def test_boot_quiet_window_holds_traffic_after_connect():
+    fake = patch_serial()
+    controller = SerialController(serial_port="/dev/null")
+    controller.startup()
+    assert not controller.is_ready
+    controller.update(DT)
+    assert fake.write_count == 0, "no frames while the controller boots"
+    warm(controller)
+    assert controller.is_ready
+    controller.update(DT)
+    assert fake.write_count == 1, "traffic starts once the window closes"
+
+
+def test_reconnect_rearms_boot_quiet_window():
+    system, fake = make_settled_system()
+    fake.fail_next_write = True
+    tick(system)
+    assert system.serial_controller._serial is None
+    system.serial_controller._last_connect_attempt_secs = time.monotonic() - (sc_mod.SERIAL_RECONNECT_INTERVAL_SECS + 1)
+    writes_before = fake.write_count
+    tick(system)  # reopens the port, which resets the controller again
+    assert system.serial_controller._serial is fake
+    assert not system.serial_controller.is_ready, "reconnect restarts the window"
+    assert fake.write_count == writes_before, "quiet through the re-boot too"
+
+
+def test_wait_until_ready_returns_once_window_closes():
+    patch_serial()
+    controller = SerialController(serial_port="/dev/null")
+    controller.startup()
+    # Backdate the connect so only a sliver of the window remains; the
+    # wait must actually ride it out rather than return early
+    controller._connected_secs = time.monotonic() - (sc_mod.SERIAL_WARMUP_SECS - 0.1)
+    assert not controller.is_ready
+    controller.wait_until_ready()
+    assert controller.is_ready
 
 
 # ---------------------------------------------------------------------------
