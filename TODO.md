@@ -7,6 +7,15 @@ finished), and CLAUDE.md now records the project's rules.
 
 ## In flight
 
+- [ ] Sound-reactive ambient lights — built 2026-07-08 (working tree):
+      `JackMixer.process()` meters per-tower mean-square output energy,
+      `JackSoundSystem.update()` smooths it into perceptual 0-1 levels
+      (instant attack, ~0.25s release, -40dB floor), exposed via
+      `SoundSystem.get_tower_levels()` (silent systems report zeros) /
+      `Tower.get_sound_level()`. ColorCycle whitens each tower's cycle
+      color by its speaker's level. Needs a hardware look-pass: the
+      tuning knobs are `LEVEL_FLOOR_DB`, `LEVEL_RELEASE_SECS`
+      (JackSoundSystem.py) and `SOUND_LEVEL_WHITENING` (ColorCycle.py)
 - [ ] Soak test the DMX rewrite: the stall root cause is fixed in code but needs a
       long run to confirm (stall WARNINGs and the 5-minute "DMX health" INFO lines
       are the signal; `kill -USR1` for a live stack dump if anything wedges). The

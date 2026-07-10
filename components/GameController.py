@@ -160,7 +160,7 @@ class GameController(StateMachineMixin, StateMachine):
             self._game_idle_secs = 0.0
         else:
             self._game_idle_secs += delta_secs
-            if self._game_idle_secs > GAME_CONTROLLER_GAME_IDLE_TIMEOUT_SECS:
+            if self._game_idle_secs > GAME_CONTROLLER_GAME_IDLE_TIMEOUT_SECS and not isinstance(self._current_game, self._ambient_class):
                 self.cancel_game()
                 return
 

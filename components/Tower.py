@@ -23,6 +23,11 @@ class Tower:
         down) comes back already finished, so is_done() gates just work."""
         return self._sound_system.play(sound, [self._tower_enum], volume, num_loops)
 
+    def get_sound_level(self) -> float:
+        """Smoothed 0.0-1.0 level of this tower's speaker output —
+        everything currently mixed to it, not any one sound."""
+        return self._sound_system.get_tower_levels()[self._tower_enum]
+
     def is_switch_pressed(self) -> bool:
         return self._input_system.is_tower_switch_pressed(self._tower_enum)
 

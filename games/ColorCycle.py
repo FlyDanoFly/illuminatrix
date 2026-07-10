@@ -15,6 +15,10 @@ HERTZ = 0.02  # longer and mellow, pretty
 COLOR_CYCLE_FADE_IN_TIME_SEC = 15.5
 COLOR_CYCLE_SUSTAIN_TIME_SEC = 0.0
 
+# How strongly the tower's speaker output whitens its cycle color:
+# 0.0 ignores sound, 1.0 desaturates all the way to white at full level
+SOUND_LEVEL_WHITENING = 0.8
+
 class ColorCycle(BaseGame):
     SOUND_BANK = "sound_banks/ambient"
 
@@ -48,7 +52,12 @@ class ColorCycle(BaseGame):
 
         self.start_hue = (self.start_hue + self.hertz * delta_secs) % 1.0
         hue = self.start_hue
-        for _, tower in self._towers.items():
-            rgb = hsv_to_rgb(hue, 1.0, 1.0)
+        levels = self._towers.get_sound_levels()
+        for tower_enum, tower in self._towers.items():
+            # Each tower's soundtrack whitens its color: the cycle hue is
+            # the base, and the speaker's current level pulls saturation
+            # down toward white so the light breathes with the audio
+            saturation = 1.0 - SOUND_LEVEL_WHITENING * levels[tower_enum]
+            rgb = hsv_to_rgb(hue, saturation, 1.0)
             tower.set_color(rgb)
             hue = (hue + self.hue_tower_step) % 1.0

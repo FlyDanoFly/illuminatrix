@@ -69,3 +69,10 @@ class SoundSystem(BaseSystem):
     def are_any_sounds_playing(self) -> bool:
         """Check if any sounds are currently playing."""
         return False
+
+    def get_tower_levels(self) -> dict[TowerEnum, float]:
+        """Perceptual output level per tower, 0.0 (silence) to 1.0 (full
+        scale), smoothed for driving lights: instant attack, gentle
+        release. Default: all silent, so systems without real audio
+        output (Null, Print) degrade to a dark meter for free."""
+        return {tower_enum: 0.0 for tower_enum in TowerEnum}
