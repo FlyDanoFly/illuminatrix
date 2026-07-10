@@ -240,6 +240,11 @@ class SerialController(BaseSystem):
                 self._baudrate,
                 timeout=0,  # non-blocking reads; we only consume in_waiting bytes
                 write_timeout=SERIAL_WRITE_TIMEOUT_SECS,
+                # The kernel allows concurrent opens, and two writers
+                # interleave garbage the CRC silently eats (pads freeze,
+                # switches go quiet). Fail the second claimant loudly
+                # instead — e.g. a bench rig while play.py is running
+                exclusive=True,
             )
             self._serial.reset_input_buffer()
             self._rx_buffer.clear()
