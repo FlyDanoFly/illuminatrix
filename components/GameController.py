@@ -85,6 +85,7 @@ class GameController(StateMachineMixin, StateMachine):
         self._selected_game: type[BaseGame] = self._game_cycler.__next__()
 
         self._ambient_class: type[BaseGame] = ambient_class
+        self._playing_ambient: bool = False
 
         self._game_idle_secs: float = 0.0
         self._controller_input_idle_secs: float = 0.0
@@ -154,6 +155,10 @@ class GameController(StateMachineMixin, StateMachine):
     # State: playing_game
 
     def on_enter_playing_game(self) -> None:
+        # Identity, not isinstance: a future selectable game subclassing
+        # the ambient class must not inherit ambient semantics (no idle
+        # timeout, buttons eject to selection)
+        self._playing_ambient = self._selected_game is self._ambient_class
         self._current_game = self._selected_game(self._towers)
         self._current_game.first_frame_update()
         logger.info("Starting game: %s", type(self._current_game).__name__)
@@ -167,7 +172,7 @@ class GameController(StateMachineMixin, StateMachine):
             self._game_idle_secs = 0.0
         else:
             self._game_idle_secs += delta_secs
-            if self._game_idle_secs > GAME_CONTROLLER_GAME_IDLE_TIMEOUT_SECS and not isinstance(self._current_game, self._ambient_class):
+            if self._game_idle_secs > GAME_CONTROLLER_GAME_IDLE_TIMEOUT_SECS and not self._playing_ambient:
                 logger.info("No player input for %.0f secs — cancelling game", self._game_idle_secs)
                 self.cancel_game()
                 return
@@ -175,7 +180,7 @@ class GameController(StateMachineMixin, StateMachine):
         if self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.RESET):
             logger.info("Reset pressed")
             is_done = True
-        elif isinstance(self._current_game, self._ambient_class) and (
+        elif self._playing_ambient and (
                 self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.START) or
                 self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.NEXT_GAME)
             ):

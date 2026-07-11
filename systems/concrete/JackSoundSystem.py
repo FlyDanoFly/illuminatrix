@@ -360,12 +360,17 @@ class JackMixer:
 
         # Meter the mixed output per tower for the game loop's
         # get_tower_levels(). dot() returns a scalar — no per-callback
-        # array allocation. Extra physical ports beyond the seven towers
-        # (an 8-channel interface) simply go unmetered
+        # array allocation. Peak-hold (max since the last consume) so a
+        # transient in an early block isn't overwritten before the game
+        # loop samples: several JACK blocks render per 30fps frame. Extra
+        # physical ports beyond the seven towers (an 8-channel interface)
+        # simply go unmetered
         for i, buf in enumerate(output_buffers):
             if i >= len(self._channel_energy):
                 break
-            self._channel_energy[i] = numpy.dot(buf, buf) / len(buf)
+            block_energy = numpy.dot(buf, buf) / len(buf)
+            if block_energy > self._channel_energy[i]:
+                self._channel_energy[i] = block_energy
 
     def startup(self):
         if self.state != MixerState.INIT:
@@ -519,11 +524,16 @@ class JackMixer:
     def is_anything_playing(self):
         return bool(self.active_sounds)
 
-    def get_channel_energy(self) -> numpy.ndarray:
-        """Mean-square energy of the last rendered block, indexed by
-        tower (TowerEnum.value - 1). Written on the JACK thread; treat
-        the returned array as read-only."""
-        return self._channel_energy
+    def consume_channel_energy(self) -> numpy.ndarray:
+        """Peak mean-square energy per tower (indexed TowerEnum.value - 1)
+        since the last consume, as a fresh copy; the meter resets so the
+        next read reflects only new callbacks. That reset is what keeps a
+        stalled server (callbacks stop, no shutdown notification) from
+        freezing the lights at the last loud block. Racing the JACK
+        thread's writes costs at most one block's peak for one frame."""
+        energy = self._channel_energy.copy()
+        self._channel_energy[:] = 0.0
+        return energy
 
 
 SHUTDOWN_FADE_SECS = 1.0
@@ -587,14 +597,19 @@ class JackSoundSystem(SoundSystem):
         self._update_tower_levels(delta_secs)
 
     def _update_tower_levels(self, delta_secs: float) -> None:
-        """Fold the mixer's raw per-block energy into the smoothed
+        """Fold the mixer's metered peak energy into the smoothed
         perceptual levels: instant attack (lights hit with the sound),
         exponential-style release over LEVEL_RELEASE_SECS (they breathe
         out instead of flickering at the frame rate)."""
-        energy = self.mixer.get_channel_energy()
-        release = min(1.0, delta_secs / LEVEL_RELEASE_SECS) if delta_secs > 0 else 0.0
-        for i, tower_enum in enumerate(TowerEnum):
-            raw = _energy_to_level(float(energy[i]))
+        energy = self.mixer.consume_channel_energy()
+        if self.mixer.force_play_on_all_channels:
+            # Stereo bench fallback: every sound plays on both physical
+            # ports, so port 0 already carries the whole mix — mirror it
+            # to every tower instead of two hot meters and five dark ones
+            energy[:] = energy[0]
+        release = min(1.0, delta_secs / LEVEL_RELEASE_SECS)
+        for tower_enum in TowerEnum:
+            raw = _energy_to_level(float(energy[tower_enum.value - 1]))
             smoothed = self._tower_levels[tower_enum]
             if raw >= smoothed:
                 smoothed = raw
@@ -604,8 +619,8 @@ class JackSoundSystem(SoundSystem):
 
     def get_tower_levels(self) -> dict[TowerEnum, float]:
         """Smoothed 0.0-1.0 output level per tower — see SoundSystem.
-        In the two-port stereo bench fallback only towers 1 and 2 carry
-        meters; the rest read 0.0."""
+        In the two-port stereo bench fallback every tower reports the
+        whole mix's level (each speaker really is playing all of it)."""
         return dict(self._tower_levels)
 
     def render(self) -> None:

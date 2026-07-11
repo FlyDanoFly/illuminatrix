@@ -15,13 +15,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import numpy  # noqa: E402
+from test_jack_sound import make_sound  # noqa: E402
 
 import systems.concrete.JackSoundSystem as jsm_mod  # noqa: E402
 from constants.constants import TowerEnum  # noqa: E402
 from systems.concrete.JackSoundSystem import (  # noqa: E402
     JackMixer,
-    JackSound,
     JackSoundSystem,
     MixerState,
     _energy_to_level,
@@ -30,6 +29,9 @@ from systems.concrete.NullSoundSystem import NullSoundSystem  # noqa: E402
 from systems.concrete.PrintSoundSystem import PrintSoundSystem  # noqa: E402
 
 FRAMES = 64
+# make_sound bakes amplitude in via volume (mix_into multiplies by it):
+# a 0.5-volume sound of ones meters mean-square 0.25 on its channels
+HALF = dict(n_samples=FRAMES * 4, volume=0.5)
 
 
 class BufferPort:
@@ -51,51 +53,54 @@ def make_started_mixer(ports: int = 7) -> JackMixer:
     return mixer
 
 
-def make_sound(amplitude: float, frames: int = FRAMES * 4) -> JackSound:
-    return JackSound(
-        filename="test",
-        data=numpy.full(frames, amplitude, dtype=numpy.float32),
-        samplerate=1000,
-    )
-
-
 def test_process_meters_energy_per_channel():
     mixer = make_started_mixer()
-    mixer.play(make_sound(0.5), [TowerEnum.Tower_1, TowerEnum.Tower_3])
+    mixer.play(make_sound(**HALF), [TowerEnum.Tower_1, TowerEnum.Tower_3])
     mixer.process(FRAMES)
-    energy = mixer.get_channel_energy()
+    energy = mixer.consume_channel_energy()
     assert abs(energy[0] - 0.25) < 1e-6, "tower 1 carries the 0.5-amplitude signal"
     assert abs(energy[2] - 0.25) < 1e-6, "tower 3 carries it too"
     assert energy[1] == 0.0, "tower 2 is silent"
     assert all(energy[i] == 0.0 for i in range(3, 7))
 
 
+def test_meter_peak_holds_between_consumes():
+    mixer = make_started_mixer()
+    mixer.play(make_sound(n_samples=FRAMES, volume=0.5), [TowerEnum.Tower_1])
+    mixer.process(FRAMES)  # the sound ends within this block
+    mixer.process(FRAMES)  # a silent block must not erase the peak
+    assert mixer.consume_channel_energy()[0] > 0.0, \
+        "a transient in an early block survives until the frame reads it"
+    assert mixer.consume_channel_energy()[0] == 0.0, \
+        "consuming resets the meter — no callbacks means it reads dark"
+
+
 def test_process_zeroes_energy_when_not_started():
     mixer = make_started_mixer()
-    mixer.play(make_sound(0.5), [TowerEnum.Tower_1])
+    mixer.play(make_sound(**HALF), [TowerEnum.Tower_1])
     mixer.process(FRAMES)
-    assert mixer.get_channel_energy()[0] > 0.0
+    assert mixer._channel_energy[0] > 0.0
     mixer.state = MixerState.SHUTDOWN
     mixer.process(FRAMES)
-    assert all(e == 0.0 for e in mixer.get_channel_energy()), \
+    assert all(e == 0.0 for e in mixer.consume_channel_energy()), \
         "the shutdown window must not leave a stale loud meter"
 
 
 def test_extra_physical_ports_beyond_towers_are_ignored():
     # An 8-channel interface registers 8 ports; only 7 towers are metered
     mixer = make_started_mixer(ports=8)
-    mixer.play(make_sound(0.5), [TowerEnum.Tower_7])
+    mixer.play(make_sound(**HALF), [TowerEnum.Tower_7])
     mixer.process(FRAMES)  # must not raise on the unmetered port
-    assert mixer.get_channel_energy()[6] > 0.0
+    assert mixer.consume_channel_energy()[6] > 0.0
 
 
 def test_teardown_zeroes_energy():
     mixer = make_started_mixer()
-    mixer.play(make_sound(0.5), [TowerEnum.Tower_1])
+    mixer.play(make_sound(**HALF), [TowerEnum.Tower_1])
     mixer.process(FRAMES)
-    assert mixer.get_channel_energy()[0] > 0.0
+    assert mixer._channel_energy[0] > 0.0
     mixer._teardown_client()
-    assert all(e == 0.0 for e in mixer.get_channel_energy()), \
+    assert all(e == 0.0 for e in mixer.consume_channel_energy()), \
         "a dead server must not freeze the lights bright"
 
 
@@ -135,7 +140,8 @@ def test_levels_attack_instantly_and_release_smoothly():
     loud = system.get_tower_levels()[TowerEnum.Tower_1]
     assert loud == _energy_to_level(0.5), "attack is instant, no ramp-up frames"
 
-    mixer._channel_energy[0] = 0.0
+    # The update consumed the meter, so with no new callbacks the level
+    # can only release from here
     system.update(frame_secs)
     after_one = system.get_tower_levels()[TowerEnum.Tower_1]
     assert 0.0 < after_one < loud, "release decays instead of dropping to zero"
@@ -154,6 +160,20 @@ def test_levels_track_their_own_tower_only():
     levels = system.get_tower_levels()
     assert levels[TowerEnum.Tower_4] > 0.0
     assert all(levels[t] == 0.0 for t in TowerEnum if t != TowerEnum.Tower_4)
+
+
+def test_stereo_fallback_mirrors_the_mix_to_all_towers():
+    # With two ports every sound plays on both, so each tower's speaker
+    # really is carrying the whole mix — the meters should say so
+    mixer = make_started_mixer(ports=2)
+    mixer.force_play_on_all_channels = True
+    system = JackSoundSystem(mixer=mixer)
+    mixer._channel_energy[0] = 0.25
+    system.update(1 / 30)
+    levels = system.get_tower_levels()
+    assert levels[TowerEnum.Tower_1] > 0.0
+    assert all(levels[t] == levels[TowerEnum.Tower_1] for t in TowerEnum), \
+        "every tower reports the mix level on a stereo bench"
 
 
 def test_silent_systems_report_all_towers_dark():

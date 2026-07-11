@@ -20,6 +20,10 @@ COLOR_CYCLE_SUSTAIN_TIME_SEC = 0.0
 # 0.0 ignores sound, 1.0 desaturates all the way to white at full level
 # (values past 1.0 just reach full white at lower levels)
 SOUND_LEVEL_WHITENING = 0.8
+# The intro fade ends on fully saturated colors while the ambient loops
+# are already loud, so ease the whitening in over this long instead of
+# snapping whiter on the first post-fade frame
+SOUND_LEVEL_RAMP_SECS = 2.0
 
 # How often to re-play an ambient loop whose Sound reports done. On JACK
 # an infinite loop only "finishes" because the server dropped it (an
@@ -38,6 +42,7 @@ class ColorCycle(BaseGame):
         self.hertz = HERTZ
         self._loops: dict[TowerEnum, Sound] = {}
         self._loop_retry_secs = 0.0
+        self._whiten_ramp = 0.0
         self._towers.load_sound_bank(self.SOUND_BANK)
 
     def first_frame_update(self) -> None:
@@ -70,13 +75,15 @@ class ColorCycle(BaseGame):
         self.start_hue = (self.start_hue + self.hertz * delta_secs) % 1.0
         hue = self.start_hue
         levels = self._towers.get_sound_levels()
+        self._whiten_ramp = min(1.0, self._whiten_ramp + delta_secs / SOUND_LEVEL_RAMP_SECS)
+        whitening = SOUND_LEVEL_WHITENING * self._whiten_ramp
         for tower_enum, tower in self._towers.items():
             # Each tower's soundtrack whitens its color: the cycle hue is
             # the base, and the speaker's current level pulls saturation
             # down toward white so the light breathes with the audio.
             # Clamped so an overdriven whitening knob whites out instead
             # of handing hsv_to_rgb a negative saturation
-            saturation = max(0.0, 1.0 - SOUND_LEVEL_WHITENING * levels[tower_enum])
+            saturation = max(0.0, 1.0 - whitening * levels[tower_enum])
             rgb = hsv_to_rgb(hue, saturation, 1.0)
             tower.set_color(rgb)
             hue = (hue + self.hue_tower_step) % 1.0

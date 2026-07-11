@@ -16,9 +16,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from test_input_system import StubInputSystem  # noqa: E402
+
 import components.GameController as gc_mod  # noqa: E402
 from bases.BaseGame import BaseGame  # noqa: E402
-from bases.InputSystem import InputSystem  # noqa: E402
 from bases.LightSystem import LightSystem  # noqa: E402
 from components.GameController import GameController  # noqa: E402
 from components.TowerController import TowerController  # noqa: E402
@@ -60,27 +61,6 @@ class FakeLightSystem(LightSystem):
         pass
 
 
-class FakeInputSystem(InputSystem):
-    """Switches read from `pressed`, a set the test mutates per frame."""
-
-    def __init__(self):
-        super().__init__()
-        self.pressed: set = set()
-
-    def _read_switches(self, delta_secs: float) -> None:
-        for switch in self.pressed:
-            self._switch_state[switch] = True
-
-    def startup(self) -> None:
-        pass
-
-    def shutdown(self) -> None:
-        pass
-
-    def render(self) -> None:
-        pass
-
-
 class FakeSoundSystem(NullSoundSystem):
     """Silent, but records what was asked of it, lets a test hold
     are_any_sounds_playing() high to keep the instructions gate closed,
@@ -111,7 +91,7 @@ class FakeSystemFactory:
     def __init__(self):
         self.light = FakeLightSystem()
         self.sound = FakeSoundSystem()
-        self.input = FakeInputSystem()
+        self.input = StubInputSystem()
 
     def get_light_system(self):
         return self.light
@@ -275,6 +255,21 @@ def test_ambient_survives_idle_timeout():
     assert rig.state == "playing_game", "ambient never idles out"
     assert isinstance(rig.game, Ambient)
     assert rig.game.updates == 3, "ambient keeps getting updates"
+
+
+def test_ambient_subclass_game_keeps_normal_game_rules():
+    # Ambient semantics attach to how the session started (the idle
+    # path), not the game's type — a selectable game subclassing the
+    # ambient class must still idle out like any other game
+    class AmbientChild(Ambient):
+        pass
+
+    rig = Rig([GameA, AmbientChild])
+    rig.step({ControllerSwitchEnum.NEXT_GAME})  # select AmbientChild
+    rig.start_selected_game()
+    assert isinstance(rig.game, AmbientChild)
+    rig.step(secs=GAME_IDLE_OVERSHOOT_SECS)
+    assert rig.state == "cancel", "subclass of ambient still idles out"
 
 
 def test_controller_button_exits_ambient():

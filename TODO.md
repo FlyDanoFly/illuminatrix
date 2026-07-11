@@ -7,15 +7,21 @@ finished), and CLAUDE.md now records the project's rules.
 
 ## In flight
 
-- [ ] Sound-reactive ambient lights — built 2026-07-08 (working tree):
-      `JackMixer.process()` meters per-tower mean-square output energy,
-      `JackSoundSystem.update()` smooths it into perceptual 0-1 levels
-      (instant attack, ~0.25s release, -40dB floor), exposed via
-      `SoundSystem.get_tower_levels()` (silent systems report zeros) /
-      `Tower.get_sound_level()`. ColorCycle whitens each tower's cycle
-      color by its speaker's level. Needs a hardware look-pass: the
-      tuning knobs are `LEVEL_FLOOR_DB`, `LEVEL_RELEASE_SECS`
-      (JackSoundSystem.py) and `SOUND_LEVEL_WHITENING` (ColorCycle.py)
+- [ ] Sound-reactive ambient lights — built 2026-07-08, code-reviewed and
+      hardened 2026-07-10 (`sound-reactive-ambient`): `JackMixer.process()`
+      meters per-tower peak mean-square energy (consumed and reset each
+      frame, so a stalled server reads dark), `JackSoundSystem.update()`
+      smooths it into perceptual 0-1 levels (instant attack, ~0.25s
+      release, -40dB floor; the stereo bench fallback mirrors the mix to
+      all towers), exposed via `SoundSystem.get_tower_levels()` (silent
+      systems report zeros). ColorCycle whitens each tower's cycle color
+      by its speaker's level (ramped in after the intro fade), re-plays
+      dropped ambient loops after a JACK bounce, and ambient sessions
+      never idle out (flag set at the idle transition, not isinstance).
+      Both tuning knobs are guarded against out-of-range values. Needs a
+      hardware look-pass: the knobs are `LEVEL_FLOOR_DB`,
+      `LEVEL_RELEASE_SECS` (JackSoundSystem.py) and
+      `SOUND_LEVEL_WHITENING`, `SOUND_LEVEL_RAMP_SECS` (ColorCycle.py)
 - [ ] Soak test the DMX rewrite: the stall root cause is fixed in code but needs a
       long run to confirm (stall WARNINGs and the 5-minute "DMX health" INFO lines
       are the signal; `kill -USR1` for a live stack dump if anything wedges). The

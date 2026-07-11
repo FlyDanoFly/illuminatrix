@@ -63,7 +63,9 @@ def test_overdriven_whitening_whites_out_instead_of_crashing():
     original = cc_mod.SOUND_LEVEL_WHITENING
     cc_mod.SOUND_LEVEL_WHITENING = 1.5
     try:
-        rig.game.update(FRAME_SECS)  # must not raise on negative saturation
+        # One ramp-length step applies the full whitening; must not raise
+        # on the negative saturation it would otherwise produce
+        rig.game.update(cc_mod.SOUND_LEVEL_RAMP_SECS)
     finally:
         cc_mod.SOUND_LEVEL_WHITENING = original
     assert all(color == (1.0, 1.0, 1.0) for color in rig.lights.colors.values()), \
@@ -75,9 +77,22 @@ def test_loud_towers_run_whiter_than_quiet_ones():
     rig.game.first_frame_update()
     rig.effects.stop_all()
     rig.sounds.levels[TowerEnum.Tower_1] = 1.0
-    rig.game.update(FRAME_SECS)
+    rig.game.update(cc_mod.SOUND_LEVEL_RAMP_SECS)
     loud = rig.lights.colors[TowerEnum.Tower_1]
     assert min(loud) > 0.0, "a loud tower is pulled toward white"
+
+
+def test_whitening_ramps_in_after_the_intro():
+    rig = Rig()
+    rig.game.first_frame_update()
+    rig.effects.stop_all()
+    rig.sounds.levels = {t: 1.0 for t in TowerEnum}
+    rig.game.update(FRAME_SECS)
+    first = min(rig.lights.colors[TowerEnum.Tower_1])
+    rig.game.update(FRAME_SECS)
+    second = min(rig.lights.colors[TowerEnum.Tower_1])
+    assert first < 0.2, "whitening starts near zero at the handoff, no snap"
+    assert second > first, "and eases in over the ramp"
 
 
 def test_dropped_loops_are_replayed_after_the_retry_window():
