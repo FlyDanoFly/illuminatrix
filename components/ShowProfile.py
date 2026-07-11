@@ -29,8 +29,8 @@ class ShowProfile:
 NORMAL_PROFILE = ShowProfile(name="normal")
 
 # Defaults for the quiet-hours profile; play.py exposes each as a flag
-DEFAULT_QUIET_VOLUME = 0.5
-DEFAULT_QUIET_BRIGHTNESS = 0.65
+DEFAULT_QUIET_VOLUME = 0.2
+DEFAULT_QUIET_BRIGHTNESS = 0.5
 DEFAULT_QUIET_GAMES = ("Music", "Simon")
 
 QUIET_PROFILE = ShowProfile(

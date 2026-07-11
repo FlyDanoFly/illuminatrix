@@ -10,9 +10,9 @@ finished), and CLAUDE.md now records the project's rules.
 - [ ] Quiet-hours show profile — on branch `quiet-hours`, needs rig
       verification (the desk sim covers the logic: `q` latches the combo).
       Holding NEXT_GAME+RESET 10s toggles a `ShowProfile`: master volume
-      (JackMixer scales every block post-mix, pre-meter; default 0.5),
+      (JackMixer scales every block post-mix, pre-meter; default 0.2),
       master light brightness (LightSystem base scales colors into
-      `_set()`; default 0.65), and a restricted roster (default Music +
+      `_set()`; default 0.5), and a restricted roster (default Music +
       Simon) — all settable via `--quiet-volume` / `--quiet-brightness` /
       `--quiet-games`. Persists across restarts via
       `~/.illuminatrix_quiet_hours` (delete the file to boot normal).
