@@ -1,3 +1,4 @@
+import logging
 import time
 from typing import Sequence
 
@@ -15,6 +16,8 @@ from managers.EffectManager import EffectManager
 from managers.ManagerSingletonFactory import ManagerSingletonFactory
 from systems.SystemSingletonFactory import SystemSingletonFactory
 from utils.utils import cycle
+
+logger = logging.getLogger(__name__)
 
 # If no input is received in this time frame, the game is cancelled
 GAME_CONTROLLER_GAME_IDLE_TIMEOUT_SECS = 5 * 60
@@ -100,8 +103,9 @@ class GameController(StateMachineMixin, StateMachine):
 
     def on_start_selection(self) -> None:
         self._towers.set_color(WHITE)
+        # Fresh cycler only — entering await_input advances it, so
+        # consuming one here would skip the first game
         self._game_cycler = cycle(self._game_classes)
-        self._selected_game = self._game_cycler.__next__()
         self._towers.load_sound_bank(self.INTRO_SOUND_BANK)
 
     # ------------------------------------------------------------
@@ -109,7 +113,7 @@ class GameController(StateMachineMixin, StateMachine):
 
     def on_enter_await_input(self) -> None:
         self._selected_game = self._game_cycler.__next__()
-        print("Currently selected game:", self._selected_game)
+        logger.info("Selected game: %s", self._selected_game.__name__)
         self._towers.play_sound(self._selected_game.__name__, volume=0.25)
         self._controller_input_idle_secs = 0.0
 
@@ -119,6 +123,9 @@ class GameController(StateMachineMixin, StateMachine):
         else:
             self._controller_input_idle_secs += delta_secs
             if self._controller_input_idle_secs > self._select_idle_timeout_secs:
+                logger.info(
+                    "No input for %.0f secs — starting ambient %s",
+                    self._controller_input_idle_secs, self._ambient_class.__name__)
                 self._selected_game = self._ambient_class
                 self.start_game()
                 return
@@ -149,7 +156,7 @@ class GameController(StateMachineMixin, StateMachine):
     def on_enter_playing_game(self) -> None:
         self._current_game = self._selected_game(self._towers)
         self._current_game.first_frame_update()
-        print("Starting game:", self._current_game.__class__)
+        logger.info("Starting game: %s", type(self._current_game).__name__)
 
         self._game_idle_secs = 0.0
 
@@ -161,17 +168,20 @@ class GameController(StateMachineMixin, StateMachine):
         else:
             self._game_idle_secs += delta_secs
             if self._game_idle_secs > GAME_CONTROLLER_GAME_IDLE_TIMEOUT_SECS and not isinstance(self._current_game, self._ambient_class):
+                logger.info("No player input for %.0f secs — cancelling game", self._game_idle_secs)
                 self.cancel_game()
                 return
 
         if self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.RESET):
+            logger.info("Reset pressed")
             is_done = True
         elif isinstance(self._current_game, self._ambient_class) and (
                 self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.START) or
                 self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.NEXT_GAME)
             ):
-                # If the user presses any button in ambient mode, go to selection mode 
-                is_done = True
+            # Any controller button in ambient mode returns to selection
+            logger.info("Controller button pressed — leaving ambient")
+            is_done = True
         else:
             is_done = self._current_game.update(delta_secs)
 
@@ -184,9 +194,9 @@ class GameController(StateMachineMixin, StateMachine):
 
     # ------------------------------------------------------------
     # State: cancel
-    
+
     def do_cancel(self, delta_secs: float):
-        print("Cancel, changing fresh to getting input")
+        logger.info("Stopping %s — returning to selection", type(self._current_game).__name__)
         del self._current_game
         self._sounds.stop_all()
         self._effects.stop_all()
