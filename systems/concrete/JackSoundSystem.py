@@ -475,7 +475,12 @@ class JackMixer:
         self._channel_energy[:] = 0.0
         with self.lock:
             # Sounds can't finish without process callbacks; games gating
-            # on are_any_sounds_playing() must not wait forever
+            # on are_any_sounds_playing() must not wait forever. stop()
+            # each one so its own is_done() comes true as well — an
+            # infinite loop dropped mid-outage otherwise reports playing
+            # forever and ColorCycle's loop healing never re-plays it
+            for sound, _ in self.active_sounds:
+                sound.stop()
             self.active_sounds = []
         if client is None:
             return

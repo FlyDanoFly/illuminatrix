@@ -95,9 +95,10 @@ def bypass_rate_limit(mixer: JackMixer) -> None:
     mixer._last_connect_attempt_secs = time.monotonic() - (jsm_mod.JACK_RECONNECT_INTERVAL_SECS + 1)
 
 
-def make_sound() -> JackSound:
+def make_sound(num_loops: int = 0) -> JackSound:
     import numpy
-    return JackSound(filename="test", data=numpy.ones(100, dtype=numpy.float32), samplerate=1000)
+    return JackSound(filename="test", data=numpy.ones(100, dtype=numpy.float32),
+                     samplerate=1000, num_loops=num_loops)
 
 
 def test_startup_connects_and_registers_ports():
@@ -148,7 +149,10 @@ def test_update_reconnects_when_server_appears():
 def test_server_death_drops_sounds_and_reconnects():
     mixer, fake = make_mixer()
     mixer.startup()
-    mixer.play(make_sound(), [TowerEnum.Tower_1])
+    oneshot = make_sound()
+    loop = make_sound(num_loops=-1)
+    mixer.play(oneshot, [TowerEnum.Tower_1])
+    mixer.play(loop, [TowerEnum.Tower_2])
     assert mixer.is_anything_playing()
     first_client = fake.clients[0]
 
@@ -157,6 +161,12 @@ def test_server_death_drops_sounds_and_reconnects():
     assert mixer.state in (MixerState.DISCONNECTED, MixerState.STARTED)
     assert not mixer.is_anything_playing(), \
         "sounds that can never finish must be dropped, or games gating on them hang"
+    # Regression: dropped sounds were cleared from the mixer but never
+    # stopped, so games holding them saw is_done() False forever — an
+    # ambient loop stayed silent after reconnect until a manual reset
+    assert oneshot.is_done(), "a dropped one-shot reports done"
+    assert loop.is_done(), \
+        "a dropped infinite loop reports done, or ColorCycle's healing never re-plays it"
     assert first_client.closed, "dead client torn down"
 
     bypass_rate_limit(mixer)
