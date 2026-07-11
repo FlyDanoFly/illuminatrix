@@ -1,5 +1,6 @@
 import logging
 import time
+from pathlib import Path
 from typing import Sequence
 
 from statemachine import State, StateMachine
@@ -9,6 +10,7 @@ from bases.InputSystem import InputSystem
 from bases.LightSystem import LightSystem
 from bases.SoundSystem import SoundSystem
 from bases.StateMachineMixin import StateMachineMixin
+from components.ShowProfile import NORMAL_PROFILE, QUIET_PROFILE, ShowProfile
 from components.TowerController import TowerController
 from constants.colors import WHITE
 from constants.constants import ControllerSwitchEnum, ShouldStop
@@ -23,6 +25,9 @@ logger = logging.getLogger(__name__)
 GAME_CONTROLLER_GAME_IDLE_TIMEOUT_SECS = 5 * 60
 # If no input is received in this time frame, go into ambient mode
 GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS = 2 * 60
+# Holding NEXT_GAME and RESET together this long toggles the quiet-hours
+# profile; both must be released before another toggle can arm
+QUIET_HOURS_HOLD_SECS = 10.0
 
 
 class GameController(StateMachineMixin, StateMachine):
@@ -38,6 +43,11 @@ class GameController(StateMachineMixin, StateMachine):
 
     While the game is going, only the reset butten is active. If it is pressed
     for x time it will stop the current game and go back to await input mode.
+
+    Holding NEXT_GAME and RESET together for QUIET_HOURS_HOLD_SECS toggles
+    the quiet-hours show profile (lower master volume/brightness, restricted
+    game roster); the active profile persists across restarts via a marker
+    file.
     """
     # The selection/instructions sounds are the controller's own bank,
     # not any game's; play.py includes it in the boot preload
@@ -63,6 +73,9 @@ class GameController(StateMachineMixin, StateMachine):
         game_classes: Sequence[type[BaseGame]],
         ambient_class: type[BaseGame],
         select_idle_timeout_secs: float = GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS,
+        normal_profile: ShowProfile = NORMAL_PROFILE,
+        quiet_profile: ShowProfile = QUIET_PROFILE,
+        quiet_state_file: Path | None = None,
     ):
         """
         Args
@@ -80,7 +93,17 @@ class GameController(StateMachineMixin, StateMachine):
 
         self._towers: TowerController = tower_controller
 
-        self._game_classes: Sequence[type[BaseGame]] = game_classes
+        self._all_game_classes: list[type[BaseGame]] = list(game_classes)
+        self._normal_profile: ShowProfile = normal_profile
+        self._quiet_profile: ShowProfile = quiet_profile
+        self._quiet_state_file: Path | None = quiet_state_file
+        self._quiet_hours: bool = self._read_quiet_hours_state()
+        self._quiet_hold_secs: float = 0.0
+        self._quiet_hold_armed: bool = True
+
+        # Sets _game_classes (the profile's roster) and the master
+        # volume/brightness before any state announces or lights up
+        self._apply_profile(self._active_profile)
         self._game_cycler = cycle(self._game_classes)
         self._selected_game: type[BaseGame] = self._game_cycler.__next__()
 
@@ -98,6 +121,109 @@ class GameController(StateMachineMixin, StateMachine):
         else:
             self._single_game = False
             self.start_selection()
+
+    def update(self, delta_secs: float) -> ShouldStop:
+        # The quiet-hours hold is watched here, above the state machine,
+        # so it works from selection, instructions, a game, or ambient
+        self._update_quiet_hours_hold(delta_secs)
+        return super().update(delta_secs)
+
+    # ------------------------------------------------------------
+    # Quiet hours
+
+    @property
+    def _active_profile(self) -> ShowProfile:
+        return self._quiet_profile if self._quiet_hours else self._normal_profile
+
+    def _update_quiet_hours_hold(self, delta_secs: float) -> None:
+        both_held = (
+            self._inputs.is_controller_switch_pressed(ControllerSwitchEnum.NEXT_GAME)
+            and self._inputs.is_controller_switch_pressed(ControllerSwitchEnum.RESET)
+        )
+        if not both_held:
+            self._quiet_hold_secs = 0.0
+            self._quiet_hold_armed = True
+            return
+        self._quiet_hold_secs += delta_secs
+        if self._quiet_hold_armed and self._quiet_hold_secs >= QUIET_HOURS_HOLD_SECS:
+            # Disarm until both buttons release, so a 20-second hold
+            # toggles once instead of bouncing straight back
+            self._quiet_hold_armed = False
+            self._toggle_quiet_hours()
+
+    def _toggle_quiet_hours(self) -> None:
+        self._quiet_hours = not self._quiet_hours
+        self._apply_profile(self._active_profile)
+        self._persist_quiet_hours()
+        # The buttons' single-press actions have already run at the start
+        # of the hold (RESET cancels a game, NEXT_GAME ejects ambient), so
+        # this normally fires from await_input with the intro bank loaded
+        # and the cue plays; from another bank it degrades to a WARNING
+        self._towers.play_sound(
+            "quiet_hours_on" if self._quiet_hours else "quiet_hours_off",
+            volume=0.25,
+        )
+        if self.current_state == self.await_input:
+            # Re-announce from the new roster, so START can't launch a
+            # selection the profile no longer allows
+            self.next_option()
+        elif self.current_state == self.playing_game and not self._playing_ambient:
+            # Reachable only when the hold began before the game did
+            # (e.g. held through the instructions); ambient stays up
+            self.cancel_game()
+
+    def _apply_profile(self, profile: ShowProfile) -> None:
+        allowed = profile.allowed_games
+        if allowed is None:
+            games = list(self._all_game_classes)
+        else:
+            games = [g for g in self._all_game_classes if g.__name__ in allowed]
+            if not games:
+                logger.error(
+                    "Profile '%s' allows none of this run's games (%s) — keeping the full roster",
+                    profile.name, ", ".join(sorted(allowed)),
+                )
+                games = list(self._all_game_classes)
+        self._game_classes: Sequence[type[BaseGame]] = games
+        self._game_cycler = cycle(self._game_classes)
+        self._sounds.set_master_volume(profile.master_volume)
+        self._lights.set_master_brightness(profile.master_brightness)
+        logger.info(
+            "Show profile '%s': volume %.2f, brightness %.2f, games: %s",
+            profile.name, profile.master_volume, profile.master_brightness,
+            ", ".join(g.__name__ for g in games),
+        )
+
+    def _read_quiet_hours_state(self) -> bool:
+        if self._quiet_state_file is None:
+            return False
+        try:
+            return self._quiet_state_file.exists()
+        except OSError:
+            logger.exception(
+                "Couldn't read quiet-hours state %s — booting in the normal profile",
+                self._quiet_state_file,
+            )
+            return False
+
+    def _persist_quiet_hours(self) -> None:
+        """Marker file: present means quiet hours, absent means normal —
+        so a restart (systemd, power blip) comes back in the same profile.
+        Failures cost persistence, never the show."""
+        if self._quiet_state_file is None:
+            return
+        try:
+            if self._quiet_hours:
+                self._quiet_state_file.write_text(
+                    "Quiet-hours profile is active; delete this file to boot into the normal profile.\n"
+                )
+            else:
+                self._quiet_state_file.unlink(missing_ok=True)
+        except OSError:
+            logger.exception(
+                "Couldn't persist quiet-hours state to %s — a restart will boot in the normal profile",
+                self._quiet_state_file,
+            )
 
     # ------------------------------------------------------------
     # State: initial_state

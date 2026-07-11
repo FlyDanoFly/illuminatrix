@@ -7,6 +7,17 @@ finished), and CLAUDE.md now records the project's rules.
 
 ## In flight
 
+- [ ] Quiet-hours show profile — on branch `quiet-hours`, needs rig
+      verification (the desk sim covers the logic: `q` latches the combo).
+      Holding NEXT_GAME+RESET 10s toggles a `ShowProfile`: master volume
+      (JackMixer scales every block post-mix, pre-meter; default 0.2),
+      master light brightness (LightSystem base scales colors into
+      `_set()`; default 0.5), and a restricted roster (default Music +
+      Simon) — all settable via `--quiet-volume` / `--quiet-brightness` /
+      `--quiet-games`. Persists across restarts via
+      `~/.illuminatrix_quiet_hours` (delete the file to boot normal).
+      Toggle cues are generated bell chimes in the intro bank
+      (`quiet_hours_on/off.wav`) — replace with produced sounds if wanted
 - [x] Sound-reactive ambient lights — merged to `main` in PR #31
       (`sound-reactive-ambient`), rig-verified 2026-07-10:
       `JackMixer.process()` meters per-tower peak mean-square energy

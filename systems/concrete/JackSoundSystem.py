@@ -318,6 +318,11 @@ class JackMixer:
         self.lock: threading.Lock = threading.Lock()
         self.state: MixerState = MixerState.INIT
         self.force_play_on_all_channels: bool = False
+        # Applied to every output block in process(); a plain float
+        # written from the game loop and read on the JACK thread — a
+        # torn read is impossible, and at worst one block plays at the
+        # previous gain
+        self.master_volume: float = 1.0
         # Mean-square energy of the last rendered block, one slot per
         # tower, written by process() on the JACK thread and read by the
         # game loop. Fixed-size for its whole life so the two threads
@@ -357,6 +362,14 @@ class JackMixer:
                 if not sound.is_done():
                     still_playing.append((sound, channel_map))
             self.active_sounds = still_playing
+
+        # Master gain lands after the mix and before the meter, so the
+        # sound-reactive lights follow what the speakers actually play.
+        # In-place multiply: no allocation on the realtime thread
+        master_volume = self.master_volume
+        if master_volume != 1.0:
+            for buf in output_buffers:
+                buf *= master_volume
 
         # Meter the mixed output per tower for the game loop's
         # get_tower_levels(). dot() returns a scalar — no per-callback
@@ -557,6 +570,12 @@ class JackSoundSystem(SoundSystem):
         """Start the JACK mixer (degrades to silence if the server is
         missing; the mixer keeps retrying from update())."""
         self.mixer.startup()
+
+    def set_master_volume(self, volume: float) -> None:
+        """Hand the master gain to the mixer, which applies it to every
+        JACK block — including sounds already playing."""
+        self._master_volume = volume
+        self.mixer.master_volume = volume
 
     def preload_sound_banks(self, paths: list[str]) -> None:
         """Warm the bank cache before the game loop starts — play.py

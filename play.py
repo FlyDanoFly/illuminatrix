@@ -4,12 +4,19 @@ import logging
 import signal
 import time
 from copy import copy
+from pathlib import Path
 from pprint import pprint
 
 from bases.BaseSystem import BaseSystem
 from components.GameController import (
     GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS,
     GameController,
+)
+from components.ShowProfile import (
+    DEFAULT_QUIET_BRIGHTNESS,
+    DEFAULT_QUIET_GAMES,
+    DEFAULT_QUIET_VOLUME,
+    ShowProfile,
 )
 from components.TowerController import TowerController
 from constants.constants import (
@@ -46,6 +53,10 @@ GAMES_TO_SKIP_IN_PRODUCTION: set[str] = {
 
 AMBIENT_GAME: str = "ColorCycle"
 
+# Outside the repo so a desk checkout and the live install don't share
+# it through git; presence of the file means quiet hours is active
+QUIET_HOURS_STATE_FILE = Path.home() / ".illuminatrix_quiet_hours"
+
 def main():
     """Run an Illuminatrix game from the command line."""
 
@@ -54,6 +65,9 @@ def main():
     print("*"*80)
 
     available_games = {c.__name__: c for c in find_game_classes("./games")}
+    # Every discovered game, captured before the ambient/production
+    # filters below whittle available_games down
+    all_game_names = set(available_games)
 
     parser = argparse.ArgumentParser(
         prog="play",
@@ -79,6 +93,12 @@ def main():
     parser.add_argument("--no-sound", action="store_true", help="disable audio entirely (no JACK server needed)")
 
     parser.add_argument("--ambient-idle-secs", type=float, default=GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS, help="seconds without input in selection mode before dropping to the ambient game")
+
+    parser.add_argument("--quiet-volume", type=float, default=DEFAULT_QUIET_VOLUME, help="master volume (0.0-1.0) while the quiet-hours profile is active")
+
+    parser.add_argument("--quiet-brightness", type=float, default=DEFAULT_QUIET_BRIGHTNESS, help="master light brightness (0.0-1.0) while the quiet-hours profile is active")
+
+    parser.add_argument("--quiet-games", nargs="+", default=list(DEFAULT_QUIET_GAMES), metavar="GAME", help="games selectable while the quiet-hours profile is active")
 
     parser.add_argument("games", nargs="*", choices=sorted(available_games.keys()), help="game to run")
 
@@ -125,6 +145,25 @@ def main():
     if not games_to_play:
         print("No games selected, did you mean to specify --allgames?")
         return
+
+    # Same deal as game names: catch a typo'd quiet flag before any
+    # system starts up. Names are checked against every discovered game
+    # (not just this run's) so a dev run with a subset still accepts the
+    # production quiet roster
+    if not 0.0 <= options.quiet_volume <= 1.0:
+        parser.error(f"--quiet-volume must be 0.0-1.0, got {options.quiet_volume}")
+    if not 0.0 <= options.quiet_brightness <= 1.0:
+        parser.error(f"--quiet-brightness must be 0.0-1.0, got {options.quiet_brightness}")
+    unknown_quiet_games = set(options.quiet_games) - all_game_names
+    if unknown_quiet_games:
+        parser.error(f"unknown --quiet-games: {', '.join(sorted(unknown_quiet_games))}")
+
+    quiet_profile = ShowProfile(
+        name="quiet hours",
+        master_volume=options.quiet_volume,
+        master_brightness=options.quiet_brightness,
+        allowed_games=frozenset(options.quiet_games),
+    )
 
     # Instantiate the systems; the factory owns the per-frame update
     # order (transports first, then the systems)
@@ -173,6 +212,8 @@ def main():
         list(games_to_play),
         ambient_game,
         select_idle_timeout_secs=options.ambient_idle_secs,
+        quiet_profile=quiet_profile,
+        quiet_state_file=QUIET_HOURS_STATE_FILE,
     )
 
     # A frame that blows way past the ~33ms budget is a stall; warn with the

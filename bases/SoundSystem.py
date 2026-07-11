@@ -46,6 +46,16 @@ class NullSound(Sound):
 
 
 class SoundSystem(BaseSystem):
+    # Class-level default so subclasses that skip super().__init__()
+    # still read 1.0 (full volume) until someone sets it
+    _master_volume: float = 1.0
+
+    def set_master_volume(self, volume: float) -> None:
+        """Scale all output by 0.0-1.0, on top of per-sound volumes.
+        Applies to sounds already playing, not just future play() calls.
+        Default just records it; silent systems have nothing to scale."""
+        self._master_volume = volume
+
     @abstractmethod
     def load_sound_bank(self, path: str) -> None:
         """Load a sound bank from the specified path."""
