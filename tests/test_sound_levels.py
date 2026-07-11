@@ -113,6 +113,18 @@ def test_energy_to_level_mapping():
     assert _energy_to_level(0.01) < _energy_to_level(0.1) < _energy_to_level(0.5)
 
 
+def test_degenerate_floor_gates_instead_of_crashing():
+    # LEVEL_FLOOR_DB is a documented tuning knob; 0.0 must not divide by zero
+    original = jsm_mod.LEVEL_FLOOR_DB
+    jsm_mod.LEVEL_FLOOR_DB = 0.0
+    try:
+        assert _energy_to_level(0.5) == 0.0, "below the gate reads dark"
+        assert _energy_to_level(1.0) == 1.0, "full scale still registers"
+        assert _energy_to_level(2.0) == 1.0
+    finally:
+        jsm_mod.LEVEL_FLOOR_DB = original
+
+
 def test_levels_attack_instantly_and_release_smoothly():
     mixer = make_started_mixer()
     system = JackSoundSystem(mixer=mixer)

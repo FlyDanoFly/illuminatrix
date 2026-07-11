@@ -39,8 +39,13 @@ GAME_IDLE_OVERSHOOT_SECS = gc_mod.GAME_CONTROLLER_GAME_IDLE_TIMEOUT_SECS + 1.0
 
 
 class FakeLightSystem(LightSystem):
+    """Records the last color set per tower."""
+
+    def __init__(self):
+        self.colors: dict[TowerEnum, ColorType] = {}
+
     def set(self, tower_enum: TowerEnum, color: ColorType, light_pos: LightPos = LightPos.All) -> None:
-        pass
+        self.colors[tower_enum] = color
 
     def startup(self) -> None:
         pass
@@ -77,14 +82,16 @@ class FakeInputSystem(InputSystem):
 
 
 class FakeSoundSystem(NullSoundSystem):
-    """Silent, but records what was asked of it, and lets a test hold
-    are_any_sounds_playing() high to keep the instructions gate closed."""
+    """Silent, but records what was asked of it, lets a test hold
+    are_any_sounds_playing() high to keep the instructions gate closed,
+    and reports whatever tower levels the test sets."""
 
     def __init__(self):
         super().__init__()
         self.played: list[str] = []
         self.loaded_banks: list[str] = []
         self.playing = False
+        self.levels: dict[TowerEnum, float] = {t: 0.0 for t in TowerEnum}
 
     def load_sound_bank(self, path: str) -> None:
         self.loaded_banks.append(path)
@@ -95,6 +102,9 @@ class FakeSoundSystem(NullSoundSystem):
 
     def are_any_sounds_playing(self) -> bool:
         return self.playing
+
+    def get_tower_levels(self) -> dict[TowerEnum, float]:
+        return dict(self.levels)
 
 
 class FakeSystemFactory:

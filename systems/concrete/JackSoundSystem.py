@@ -146,6 +146,11 @@ def _energy_to_level(mean_square: float) -> float:
     if mean_square <= 0.0:
         return 0.0
     db = 10.0 * math.log10(mean_square)
+    if LEVEL_FLOOR_DB >= 0.0:
+        # Degenerate tuning (floor at or above full scale): act as a hard
+        # gate at the floor instead of dividing by zero — a bad knob value
+        # must cost fidelity, not the process
+        return 1.0 if db >= LEVEL_FLOOR_DB else 0.0
     return min(1.0, max(0.0, (db - LEVEL_FLOOR_DB) / -LEVEL_FLOOR_DB))
 
 
@@ -365,6 +370,12 @@ class JackMixer:
     def startup(self):
         if self.state != MixerState.INIT:
             raise RuntimeError("Mixer can only be started from INIT state")
+        # The metering dot() in process() is the only BLAS-routed call in
+        # this process, and OpenBLAS does lazy first-call setup (buffers,
+        # possibly threads). Warm it here so that stall never lands on the
+        # JACK realtime thread
+        warm = numpy.ones(8, dtype=numpy.float32)
+        numpy.dot(warm, warm)
         if self._try_connect():
             self.state = MixerState.STARTED
         else:
