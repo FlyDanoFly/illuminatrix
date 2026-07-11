@@ -60,6 +60,12 @@ SERIAL_STALE_STATE_SECS = 2.0
 # While disconnected, repeat an ERROR log at this interval so a dead
 # controller is visible in the log stream, not just one line at startup
 SERIAL_DISCONNECTED_LOG_INTERVAL_SECS = 30.0
+# Pad colors ramp toward their targets instead of stepping: sound-reactive
+# games can slam all 21 LED channels in one frame, and that load step on
+# the pad controller board is suspected of glitching the switch sense
+# lines into phantom presses (seen once on the bench, 2026-07-10). A full
+# 0-255 swing takes this long; small changes still land in one frame
+PAD_COLOR_SLEW_SECS = 0.25
 
 def compute_crc8(data: bytes) -> int:
     crc = 0x00
@@ -120,7 +126,12 @@ class SerialController(BaseSystem):
         self._last_connect_attempt_secs: float = float("-inf")
         self._last_valid_response_secs: float = float("-inf")
         self._last_disconnected_log_secs: float = float("-inf")
+        # _pad_colors is what rides the wire; set_pad_color() writes
+        # _pad_targets and update() slews the wire colors toward them
         self._pad_colors: dict[TowerEnum, tuple[int, int, int]] = {
+            tower_enum: (0, 0, 0) for tower_enum in TowerEnum
+        }
+        self._pad_targets: dict[TowerEnum, tuple[int, int, int]] = {
             tower_enum: (0, 0, 0) for tower_enum in TowerEnum
         }
         self._control_leds: list[int] = [0, 0, 0]
@@ -150,6 +161,7 @@ class SerialController(BaseSystem):
         pressed_switches later in the frame sees this frame's exchange."""
         if self._active_systems == 0:
             return
+        self._slew_pad_colors(delta_secs)
         self._latest_pressed = self._exchange()
 
     def render(self) -> None:
@@ -162,8 +174,22 @@ class SerialController(BaseSystem):
         return self._latest_pressed
 
     def set_pad_color(self, tower_enum: TowerEnum, rgb: tuple[int, int, int]) -> None:
-        """Queue a pad's RGB (0-255 per channel) for the next exchange."""
-        self._pad_colors[tower_enum] = (rgb[0], rgb[1], rgb[2])
+        """Set a pad's RGB target (0-255 per channel); the wire ramps
+        toward it over PAD_COLOR_SLEW_SECS."""
+        self._pad_targets[tower_enum] = (rgb[0], rgb[1], rgb[2])
+
+    def _slew_pad_colors(self, delta_secs: float) -> None:
+        """Move the wire colors toward their targets, bounded per frame —
+        see PAD_COLOR_SLEW_SECS."""
+        step = max(1, round(255 * delta_secs / PAD_COLOR_SLEW_SECS))
+        for tower_enum, target in self._pad_targets.items():
+            current = self._pad_colors[tower_enum]
+            if current == target:
+                continue
+            self._pad_colors[tower_enum] = tuple(
+                min(c + step, t) if t > c else max(c - step, t)
+                for c, t in zip(current, target, strict=True)
+            )
 
     def set_control_led(self, controller_switch_enum: ControllerSwitchEnum, brightness: int) -> None:
         """Queue a control-button LED brightness (0-255) for the next exchange."""

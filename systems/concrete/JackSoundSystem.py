@@ -5,6 +5,7 @@ Most important next goal is to get it running with a simulation.
 """
 
 import logging
+import math
 import random
 import sys
 import threading
@@ -29,6 +30,13 @@ JACK_SERVER_NAME = "illuminatrix_jack_server_mixer"
 
 # Minimum time between attempts to (re)connect to the JACK server
 JACK_RECONNECT_INTERVAL_SECS = 2.0
+# Tower levels: mean-square energy at or below this dB reads as 0.0, full
+# scale (0 dB) as 1.0. -40 dB spans roughly "quiet ambience" to "loud"
+LEVEL_FLOOR_DB = -40.0
+# Release time for the smoothed tower levels — the meter falls to ~63% of
+# the way toward the new quieter value in this many seconds. Attack is
+# instant: lights should hit with the sound, not after it
+LEVEL_RELEASE_SECS = 0.25
 # While disconnected, repeat an ERROR at this interval so a silent
 # installation is visible in the log stream, not just one line at startup
 JACK_DISCONNECTED_LOG_INTERVAL_SECS = 30.0
@@ -128,6 +136,22 @@ def load_sound_bank(directory: str) -> dict[str, SoundData]:
         logger.error("Missing key in sound bank manifest: %s", e)
         raise
     return sound_bank
+
+
+def _energy_to_level(mean_square: float) -> float:
+    """Map a block's mean-square energy to a perceptual 0.0-1.0 level:
+    LEVEL_FLOOR_DB reads as 0.0, full scale (0 dB) as 1.0. The log
+    mapping is what makes quiet ambience visible instead of parking the
+    meter near zero until a peak."""
+    if mean_square <= 0.0:
+        return 0.0
+    db = 10.0 * math.log10(mean_square)
+    if LEVEL_FLOOR_DB >= 0.0:
+        # Degenerate tuning (floor at or above full scale): act as a hard
+        # gate at the floor instead of dividing by zero — a bad knob value
+        # must cost fidelity, not the process
+        return 1.0 if db >= LEVEL_FLOOR_DB else 0.0
+    return min(1.0, max(0.0, (db - LEVEL_FLOOR_DB) / -LEVEL_FLOOR_DB))
 
 
 class JackSound(Sound):
@@ -294,6 +318,12 @@ class JackMixer:
         self.lock: threading.Lock = threading.Lock()
         self.state: MixerState = MixerState.INIT
         self.force_play_on_all_channels: bool = False
+        # Mean-square energy of the last rendered block, one slot per
+        # tower, written by process() on the JACK thread and read by the
+        # game loop. Fixed-size for its whole life so the two threads
+        # never race on a reallocation; a torn read costs one frame of
+        # stale meter, which no one can see
+        self._channel_energy = numpy.zeros(len(TowerEnum), dtype=numpy.float32)
         # Set from JACK's shutdown-callback thread; handled in update()
         self._server_went_away: bool = False
         self._last_connect_attempt_secs: float = float("-inf")
@@ -311,6 +341,7 @@ class JackMixer:
             buf[:] = 0.0
 
         if self.state != MixerState.STARTED:
+            self._channel_energy[:] = 0.0
             return
 
         with self.lock:
@@ -327,9 +358,29 @@ class JackMixer:
                     still_playing.append((sound, channel_map))
             self.active_sounds = still_playing
 
+        # Meter the mixed output per tower for the game loop's
+        # get_tower_levels(). dot() returns a scalar — no per-callback
+        # array allocation. Peak-hold (max since the last consume) so a
+        # transient in an early block isn't overwritten before the game
+        # loop samples: several JACK blocks render per 30fps frame. Extra
+        # physical ports beyond the seven towers (an 8-channel interface)
+        # simply go unmetered
+        for i, buf in enumerate(output_buffers):
+            if i >= len(self._channel_energy):
+                break
+            block_energy = numpy.dot(buf, buf) / len(buf)
+            if block_energy > self._channel_energy[i]:
+                self._channel_energy[i] = block_energy
+
     def startup(self):
         if self.state != MixerState.INIT:
             raise RuntimeError("Mixer can only be started from INIT state")
+        # The metering dot() in process() is the only BLAS-routed call in
+        # this process, and OpenBLAS does lazy first-call setup (buffers,
+        # possibly threads). Warm it here so that stall never lands on the
+        # JACK realtime thread
+        warm = numpy.ones(8, dtype=numpy.float32)
+        numpy.dot(warm, warm)
         if self._try_connect():
             self.state = MixerState.STARTED
         else:
@@ -419,6 +470,9 @@ class JackMixer:
     def _teardown_client(self) -> None:
         client, self.client = self.client, None
         self.outports = []
+        # No callbacks means no fresh meter values; a stale loud reading
+        # would freeze the lights bright for the whole outage
+        self._channel_energy[:] = 0.0
         with self.lock:
             # Sounds can't finish without process callbacks; games gating
             # on are_any_sounds_playing() must not wait forever
@@ -470,6 +524,17 @@ class JackMixer:
     def is_anything_playing(self):
         return bool(self.active_sounds)
 
+    def consume_channel_energy(self) -> numpy.ndarray:
+        """Peak mean-square energy per tower (indexed TowerEnum.value - 1)
+        since the last consume, as a fresh copy; the meter resets so the
+        next read reflects only new callbacks. That reset is what keeps a
+        stalled server (callbacks stop, no shutdown notification) from
+        freezing the lights at the last loud block. Racing the JACK
+        thread's writes costs at most one block's peak for one frame."""
+        energy = self._channel_energy.copy()
+        self._channel_energy[:] = 0.0
+        return energy
+
 
 SHUTDOWN_FADE_SECS = 1.0
 # Bound the shutdown fade wait: if the JACK server died mid-run the
@@ -484,6 +549,9 @@ class JackSoundSystem(SoundSystem):
         self.mixer = mixer
         self.sound_bank: dict[str, SoundData] = {}
         self._bank_cache: dict[str, dict[str, SoundData]] = {}
+        self._tower_levels: dict[TowerEnum, float] = {
+            tower_enum: 0.0 for tower_enum in TowerEnum
+        }
 
     def startup(self) -> None:
         """Start the JACK mixer (degrades to silence if the server is
@@ -523,8 +591,37 @@ class JackSoundSystem(SoundSystem):
 
     def update(self, delta_secs: float) -> None:
         """Audio itself renders on JACK's thread; this drives the mixer's
-        housekeeping (server-death detection and reconnect)."""
+        housekeeping (server-death detection and reconnect) and refreshes
+        the smoothed per-tower levels games read."""
         self.mixer.update()
+        self._update_tower_levels(delta_secs)
+
+    def _update_tower_levels(self, delta_secs: float) -> None:
+        """Fold the mixer's metered peak energy into the smoothed
+        perceptual levels: instant attack (lights hit with the sound),
+        exponential-style release over LEVEL_RELEASE_SECS (they breathe
+        out instead of flickering at the frame rate)."""
+        energy = self.mixer.consume_channel_energy()
+        if self.mixer.force_play_on_all_channels:
+            # Stereo bench fallback: every sound plays on both physical
+            # ports, so port 0 already carries the whole mix — mirror it
+            # to every tower instead of two hot meters and five dark ones
+            energy[:] = energy[0]
+        release = min(1.0, delta_secs / LEVEL_RELEASE_SECS)
+        for tower_enum in TowerEnum:
+            raw = _energy_to_level(float(energy[tower_enum.value - 1]))
+            smoothed = self._tower_levels[tower_enum]
+            if raw >= smoothed:
+                smoothed = raw
+            else:
+                smoothed += (raw - smoothed) * release
+            self._tower_levels[tower_enum] = smoothed
+
+    def get_tower_levels(self) -> dict[TowerEnum, float]:
+        """Smoothed 0.0-1.0 output level per tower — see SoundSystem.
+        In the two-port stereo bench fallback every tower reports the
+        whole mix's level (each speaker really is playing all of it)."""
+        return dict(self._tower_levels)
 
     def render(self) -> None:
         """Audio renders on JACK's thread; nothing to do per frame."""

@@ -385,15 +385,39 @@ def test_pad_colors_default_to_black():
     assert fake.last_written[1:22] == bytes(21)
 
 
-def test_pad_color_rides_the_next_request_frame():
+def test_pad_color_ramps_toward_its_target():
+    # The slew limiter: a big jump moves one bounded step per frame (an
+    # instant step across all LED channels is suspected of glitching the
+    # switch sense lines into phantom presses), while small changes still
+    # land in one frame
     system, fake = make_settled_system()
     system.serial_controller.set_pad_color(TowerEnum.Tower_1, (255, 0, 7))
     system.serial_controller.set_pad_color(TowerEnum.Tower_7, (1, 2, 3))
     tick(system)
+    step = max(1, round(255 * DT / sc_mod.PAD_COLOR_SLEW_SECS))
     frame = fake.last_written
-    assert frame[1:4] == bytes([255, 0, 7]), "Tower_1 RGB leads the payload"
+    assert frame[1:4] == bytes([step, 0, 7]), \
+        "a full swing moves one step; a small change lands in one frame"
     assert frame[19:22] == bytes([1, 2, 3]), "Tower_7 RGB ends the pad block"
     assert frame[25] == compute_crc8(frame[1:25]), "CRC covers the new colors"
+
+    for _ in range(int(sc_mod.PAD_COLOR_SLEW_SECS / DT) + 1):
+        tick(system)
+    assert fake.last_written[1:4] == bytes([255, 0, 7]), \
+        "the full swing completes within PAD_COLOR_SLEW_SECS"
+
+
+def test_pad_color_ramps_down_as_well():
+    system, fake = make_settled_system()
+    system.serial_controller.set_pad_color(TowerEnum.Tower_1, (255, 255, 255))
+    for _ in range(int(sc_mod.PAD_COLOR_SLEW_SECS / DT) + 2):
+        tick(system)
+    assert fake.last_written[1:4] == bytes([255, 255, 255])
+    system.serial_controller.set_pad_color(TowerEnum.Tower_1, (0, 0, 0))
+    tick(system)
+    step = max(1, round(255 * DT / sc_mod.PAD_COLOR_SLEW_SECS))
+    assert fake.last_written[1:4] == bytes([255 - step] * 3), \
+        "blackout ramps down at the same bounded rate"
 
 
 def test_control_led_rides_the_next_request_frame():

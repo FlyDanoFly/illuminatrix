@@ -104,6 +104,11 @@ class TowerController:
     def are_any_sounds_playing(self) -> bool:
         return self._sound_system.are_any_sounds_playing()
 
+    def get_sound_levels(self) -> dict[TowerEnum, float]:
+        """Smoothed 0.0-1.0 speaker output level per tower (silent
+        systems report all zeros)."""
+        return self._sound_system.get_tower_levels()
+
     # ----------------------------------------------------------------------
     # Switches
 
