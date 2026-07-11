@@ -7,26 +7,27 @@ finished), and CLAUDE.md now records the project's rules.
 
 ## In flight
 
-- [ ] Sound-reactive ambient lights — built 2026-07-08, code-reviewed and
-      hardened 2026-07-10 (`sound-reactive-ambient`): `JackMixer.process()`
-      meters per-tower peak mean-square energy (consumed and reset each
-      frame, so a stalled server reads dark), `JackSoundSystem.update()`
-      smooths it into perceptual 0-1 levels (instant attack, ~0.25s
-      release, -40dB floor; the stereo bench fallback mirrors the mix to
-      all towers), exposed via `SoundSystem.get_tower_levels()` (silent
-      systems report zeros). ColorCycle whitens each tower's cycle color
-      by its speaker's level (ramped in after the intro fade), re-plays
-      dropped ambient loops after a JACK bounce, and ambient sessions
-      never idle out (flag set at the idle transition, not isinstance).
-      Both tuning knobs are guarded against out-of-range values. Needs a
-      hardware look-pass: the knobs are `LEVEL_FLOOR_DB`,
-      `LEVEL_RELEASE_SECS` (JackSoundSystem.py), `SOUND_LEVEL_WHITENING`,
-      `SOUND_LEVEL_RAMP_SECS` (ColorCycle.py), and `PAD_COLOR_SLEW_SECS`
-      (serial_controller.py). Bench note 2026-07-10: phantom controller
-      presses appeared once with whitening at 0.8 (gone at 0.0, then gone
-      at 0.8 too — marginal/electrical, suspected LED load steps glitching
-      the pad micro's switch lines); pad colors now slew-limit as a
-      precaution. If phantoms recur, `--debug
+- [x] Sound-reactive ambient lights — merged to `main` in PR #31
+      (`sound-reactive-ambient`), rig-verified 2026-07-10:
+      `JackMixer.process()` meters per-tower peak mean-square energy
+      (consumed and reset each frame, so a stalled server reads dark),
+      `JackSoundSystem.update()` smooths it into perceptual 0-1 levels
+      (instant attack, ~0.25s release, -40dB floor; the stereo bench
+      fallback mirrors the mix to all towers), exposed via
+      `SoundSystem.get_tower_levels()` (silent systems report zeros).
+      ColorCycle whitens each tower's cycle color by its speaker's level
+      (ramped in after the intro fade), re-plays dropped ambient loops
+      after a JACK bounce, and ambient sessions never idle out (flag set
+      at the idle transition, not isinstance)
+- [ ] Sound-reactive tuning look-pass on the full installation: the knobs
+      are `LEVEL_FLOOR_DB`, `LEVEL_RELEASE_SECS` (JackSoundSystem.py),
+      `SOUND_LEVEL_WHITENING`, `SOUND_LEVEL_RAMP_SECS` (ColorCycle.py),
+      and `PAD_COLOR_SLEW_SECS` (serial_controller.py) — all guarded
+      against out-of-range values. Bench note 2026-07-10: phantom
+      controller presses appeared once with whitening at 0.8 (gone at 0.0,
+      then gone at 0.8 too — marginal/electrical, suspected LED load steps
+      glitching the pad micro's switch lines); pad colors now slew-limit
+      as a precaution. If phantoms recur, `--debug
       systems.concrete.serial_controller` shows whether they arrive as
       CRC-valid frames (firmware really read them) or parser resync luck
 - [ ] Soak test the DMX rewrite: the stall root cause is fixed in code but needs a
