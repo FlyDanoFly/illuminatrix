@@ -1,9 +1,11 @@
 """Tests for GameController's state flow: selection cycling, the
 instructions gate, idle timeouts (selection idles into ambient, games
-idle back to selection — but ambient itself never times out), and the
-button paths out of games and ambient. No hardware — the light, sound,
-and input systems are fakes; TowerController and EffectManager are the
-real ones wired on top.
+idle back to selection — but ambient itself never times out), the
+button paths out of games and ambient, and the quiet-hours profile
+(the NEXT_GAME+RESET hold, master volume/brightness, roster
+restriction, and the persistence marker file). No hardware — the
+light, sound, and input systems are fakes; TowerController and
+EffectManager are the real ones wired on top.
 
 Runs two ways:
 
@@ -22,6 +24,7 @@ import components.GameController as gc_mod  # noqa: E402
 from bases.BaseGame import BaseGame  # noqa: E402
 from bases.LightSystem import LightSystem  # noqa: E402
 from components.GameController import GameController  # noqa: E402
+from components.ShowProfile import ShowProfile  # noqa: E402
 from components.TowerController import TowerController  # noqa: E402
 from constants.constants import (  # noqa: E402
     ColorType,
@@ -45,7 +48,7 @@ class FakeLightSystem(LightSystem):
     def __init__(self):
         self.colors: dict[TowerEnum, ColorType] = {}
 
-    def set(self, tower_enum: TowerEnum, color: ColorType, light_pos: LightPos = LightPos.All) -> None:
+    def _set(self, tower_enum: TowerEnum, color: ColorType, light_pos: LightPos = LightPos.All) -> None:
         self.colors[tower_enum] = color
 
     def startup(self) -> None:
@@ -143,19 +146,20 @@ class Rig:
     """A GameController on fake systems, stepped like play.py steps it:
     input system first, then the controller."""
 
-    def __init__(self, game_classes, ambient_class=Ambient):
+    def __init__(self, game_classes, ambient_class=Ambient, **controller_kwargs):
         self.systems = FakeSystemFactory()
         self.inputs = self.systems.input
         self.sounds = self.systems.sound
         managers = FakeManagerFactory(self.systems)
         towers = TowerController(self.systems, managers)
+        controller_kwargs.setdefault("select_idle_timeout_secs", SELECT_IDLE_TIMEOUT_SECS)
         self.controller = GameController(
             self.systems,
             managers,
             towers,
             game_classes,
             ambient_class,
-            select_idle_timeout_secs=SELECT_IDLE_TIMEOUT_SECS,
+            **controller_kwargs,
         )
 
     def step(self, pressed=(), secs=FRAME_SECS):
@@ -311,6 +315,119 @@ def test_single_game_done_stops_the_program():
     assert rig.game.updates == 1
     rig.game.done = True
     assert rig.step(), "the game finishing stops the program"
+
+
+# ------------------------------------------------------------
+# Quiet hours
+
+QUIET_HOLD = {ControllerSwitchEnum.NEXT_GAME, ControllerSwitchEnum.RESET}
+QUIET_TEST_PROFILE = ShowProfile(
+    name="quiet test",
+    master_volume=0.5,
+    master_brightness=0.65,
+    allowed_games=frozenset({"GameB"}),
+)
+# The quiet tests hold buttons across multi-second steps; the tiny test
+# select-idle timeout would drop into ambient mid-hold and muddy them
+NO_AMBIENT_SECS = 60.0
+
+
+def hold_quiet_combo(rig):
+    """Press NEXT_GAME+RESET (single-press actions fire here), then keep
+    holding past the toggle threshold."""
+    rig.step(QUIET_HOLD)
+    rig.step(QUIET_HOLD, secs=gc_mod.QUIET_HOURS_HOLD_SECS + 0.1)
+
+
+def test_quiet_hold_toggles_profile():
+    rig = Rig([GameA, GameB], quiet_profile=QUIET_TEST_PROFILE,
+              select_idle_timeout_secs=NO_AMBIENT_SECS)
+    assert rig.sounds._master_volume == 1.0
+    hold_quiet_combo(rig)
+    assert rig.sounds._master_volume == 0.5
+    assert rig.systems.light._master_brightness == 0.65
+    assert "quiet_hours_on" in rig.sounds.played
+    assert rig.state == "await_input"
+    assert rig.sounds.played[-1] == "GameB", "re-announces from the quiet roster"
+
+    rig.step()  # release
+    rig.step({ControllerSwitchEnum.NEXT_GAME})
+    assert rig.sounds.played[-1] == "GameB", "restricted roster wraps to itself"
+
+
+def test_quiet_hold_toggles_once_until_released():
+    rig = Rig([GameA, GameB], quiet_profile=QUIET_TEST_PROFILE,
+              select_idle_timeout_secs=NO_AMBIENT_SECS)
+    hold_quiet_combo(rig)
+    rig.step(QUIET_HOLD, secs=gc_mod.QUIET_HOURS_HOLD_SECS * 3)
+    assert rig.sounds._master_volume == 0.5, "no second toggle without a release"
+
+
+def test_quiet_hold_toggles_back_and_persists():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        state_file = Path(tmp) / "quiet_state"
+        rig = Rig([GameA, GameB], quiet_profile=QUIET_TEST_PROFILE,
+                  quiet_state_file=state_file,
+                  select_idle_timeout_secs=NO_AMBIENT_SECS)
+        hold_quiet_combo(rig)
+        assert state_file.exists(), "toggle writes the marker file"
+
+        # A fresh controller on the same marker boots straight into quiet
+        rig2 = Rig([GameA, GameB], quiet_profile=QUIET_TEST_PROFILE,
+                   quiet_state_file=state_file,
+                   select_idle_timeout_secs=NO_AMBIENT_SECS)
+        assert rig2.sounds._master_volume == 0.5
+        assert rig2.sounds.played == ["GameB"], "boot announces from the quiet roster"
+        white = rig2.systems.light.colors[TowerEnum.Tower_1]
+        assert white == (0.65, 0.65, 0.65), "selection white is brightness-scaled"
+
+        # Release and hold again: back to normal, marker gone
+        rig.step()
+        hold_quiet_combo(rig)
+        assert rig.sounds._master_volume == 1.0
+        assert rig.systems.light._master_brightness == 1.0
+        assert "quiet_hours_off" in rig.sounds.played
+        assert not state_file.exists()
+
+
+def test_quiet_profile_without_matching_games_keeps_full_roster():
+    stranger = ShowProfile(name="quiet test", master_volume=0.5,
+                           allowed_games=frozenset({"NotAGame"}))
+    rig = Rig([GameA, GameB], quiet_profile=stranger,
+              select_idle_timeout_secs=NO_AMBIENT_SECS)
+    hold_quiet_combo(rig)
+    assert rig.sounds._master_volume == 0.5, "the volume cap still applies"
+    rig.step()
+    rig.step({ControllerSwitchEnum.NEXT_GAME})
+    rig.step()
+    rig.step({ControllerSwitchEnum.NEXT_GAME})
+    assert {"GameA", "GameB"} <= set(rig.sounds.played), "full roster still cycles"
+
+
+def test_quiet_hold_during_game_resets_then_toggles():
+    rig = Rig([GameA, GameB], quiet_profile=QUIET_TEST_PROFILE,
+              select_idle_timeout_secs=NO_AMBIENT_SECS)
+    rig.start_selected_game()
+    rig.step(QUIET_HOLD)  # RESET's own press action cancels the game
+    assert rig.state == "cancel"
+    rig.step(QUIET_HOLD)
+    assert rig.state == "await_input"
+    rig.step(QUIET_HOLD, secs=gc_mod.QUIET_HOURS_HOLD_SECS)
+    assert rig.sounds._master_volume == 0.5
+
+
+def test_quiet_hold_during_ambient_ejects_then_toggles():
+    rig = Rig([GameA, GameB], quiet_profile=QUIET_TEST_PROFILE)
+    rig.step(secs=SELECT_IDLE_TIMEOUT_SECS + 0.1)
+    assert isinstance(rig.game, Ambient)
+    rig.step(QUIET_HOLD)  # NEXT_GAME's own press action ejects ambient
+    assert rig.state == "cancel"
+    rig.step(QUIET_HOLD)
+    assert rig.state == "await_input"
+    rig.step(QUIET_HOLD, secs=gc_mod.QUIET_HOURS_HOLD_SECS)
+    assert rig.sounds._master_volume == 0.5
 
 
 if __name__ == "__main__":

@@ -68,7 +68,7 @@ class EmbeddedLightSystem(LightSystem):
         if self._serial_controller is not None:
             self._serial_controller.shutdown()
 
-    def set(self, tower_enum: TowerEnum, color: ColorType, light_pos: LightPos = LightPos.All):
+    def _set(self, tower_enum: TowerEnum, color: ColorType, light_pos: LightPos = LightPos.All):
         """
         Set the color of one tower's lights.
 

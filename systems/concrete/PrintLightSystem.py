@@ -22,7 +22,7 @@ class PrintLightSystem(LightSystem):
         self._printed: dict[TowerEnum, tuple[ColorType, LightPos]] = {}
         self._last_print_secs: dict[TowerEnum, float] = {}
 
-    def set(self, tower_enum: TowerEnum, color: ColorType, light_pos: LightPos = LightPos.All) -> None:
+    def _set(self, tower_enum: TowerEnum, color: ColorType, light_pos: LightPos = LightPos.All) -> None:
         self._current[tower_enum] = (color, light_pos)
 
     def update(self, delta_secs: float) -> None:

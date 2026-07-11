@@ -86,7 +86,7 @@ class WebSimulationLightSystem(LightSystem):
             self.websocket.close()
         self.websocket = None
 
-    def set(self, tower_enum: TowerEnum, color: ColorType, light_pos: LightPos = LightPos.All) -> None:
+    def _set(self, tower_enum: TowerEnum, color: ColorType, light_pos: LightPos = LightPos.All) -> None:
         """
         Set one or more towers the same color
 

@@ -13,7 +13,8 @@ live installation Pi itself.
 - Run: `python play.py {embedded|web|print} [--allgames] [--no-sound]
   [--debug LOGGER] [Game ...]`
 - Desk simulator (no hardware): `python play.py print --allgames <Game>` —
-  keys 1-7 are towers, enter/space/esc the controller buttons
+  keys 1-7 are towers, enter/space/esc the controller buttons, q latches
+  the quiet-hours combo (next+reset held) since a terminal can't hold keys
 - Bench rigs (need hardware): `python systems/concrete/dmx_controller.py`,
   `python systems/concrete/JackSoundSystem.py [bank_dir] [sound]`,
   `python experiments/pad_tower_map_test.py` (tower/pad wiring check)

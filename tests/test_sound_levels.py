@@ -64,6 +64,27 @@ def test_process_meters_energy_per_channel():
     assert all(energy[i] == 0.0 for i in range(3, 7))
 
 
+def test_master_volume_scales_output_and_meter():
+    import numpy
+
+    mixer = make_started_mixer()
+    mixer.master_volume = 0.5
+    mixer.play(make_sound(n_samples=FRAMES * 4, volume=1.0), [TowerEnum.Tower_1])
+    mixer.process(FRAMES)
+    samples = numpy.frombuffer(mixer.outports[0].get_buffer(), dtype=numpy.float32)
+    assert abs(samples[0] - 0.5) < 1e-6, "unity-volume ones leave at the master gain"
+    energy = mixer.consume_channel_energy()
+    assert abs(energy[0] - 0.25) < 1e-6, \
+        "the meter reads post-master output, so the lights follow the speakers"
+
+
+def test_sound_system_hands_master_volume_to_the_mixer():
+    mixer = make_started_mixer()
+    system = JackSoundSystem(mixer=mixer)
+    system.set_master_volume(0.5)
+    assert mixer.master_volume == 0.5
+
+
 def test_meter_peak_holds_between_consumes():
     mixer = make_started_mixer()
     mixer.play(make_sound(n_samples=FRAMES, volume=0.5), [TowerEnum.Tower_1])
