@@ -1,9 +1,11 @@
 """Tests for GameController's state flow: selection cycling, the
 instructions gate, idle timeouts (selection idles into ambient, games
 idle back to selection — but ambient itself never times out), the
-button paths out of games and ambient, and the quiet-hours profile
-(the NEXT_GAME+RESET hold, master volume/brightness, roster
-restriction, and the persistence marker file). No hardware — the
+button paths out of games and ambient, the pad prompt (stomps in
+selection/ambient answer from that pad's tower under one global
+cooldown), and the quiet-hours profile (the NEXT_GAME+RESET hold,
+master volume/brightness, roster restriction, and the persistence
+marker file). No hardware — the
 light, sound, and input systems are fakes; TowerController and
 EffectManager are the real ones wired on top.
 
@@ -72,6 +74,7 @@ class FakeSoundSystem(NullSoundSystem):
     def __init__(self):
         super().__init__()
         self.played: list[str] = []
+        self.played_at: list[tuple[str, tuple[TowerEnum, ...] | None]] = []
         self.loaded_banks: list[str] = []
         self.playing = False
         self.levels: dict[TowerEnum, float] = {t: 0.0 for t in TowerEnum}
@@ -81,6 +84,7 @@ class FakeSoundSystem(NullSoundSystem):
 
     def play(self, sound, tower_enums=None, volume=1.0, num_loops=0):
         self.played.append(sound)
+        self.played_at.append((sound, tuple(tower_enums) if tower_enums else None))
         return super().play(sound, tower_enums, volume, num_loops)
 
     def are_any_sounds_playing(self) -> bool:
@@ -315,6 +319,57 @@ def test_single_game_done_stops_the_program():
     assert rig.game.updates == 1
     rig.game.done = True
     assert rig.step(), "the game finishing stops the program"
+
+
+# ------------------------------------------------------------
+# Pad prompt ("go use the control panel")
+
+
+def pad_prompts(rig):
+    """The tower lists the pad prompt was played on, in order."""
+    return [towers for sound, towers in rig.sounds.played_at
+            if sound == gc_mod.PAD_PROMPT_SOUND]
+
+
+def test_pad_stomp_in_selection_prompts_from_that_tower():
+    rig = Rig([GameA, GameB])
+    rig.step({TowerEnum.Tower_3})
+    assert pad_prompts(rig) == [(TowerEnum.Tower_3,)]
+
+
+def test_pad_prompt_cooldown_is_global_across_pads():
+    rig = Rig([GameA, GameB])
+    rig.step({TowerEnum.Tower_3})
+    rig.step()  # release
+    rig.step({TowerEnum.Tower_5})
+    assert len(pad_prompts(rig)) == 1, "a different pad inside the cooldown stays silent"
+    rig.step(secs=gc_mod.PAD_PROMPT_COOLDOWN_SECS)  # release; cooldown drains
+    rig.step({TowerEnum.Tower_5})
+    assert pad_prompts(rig)[-1] == (TowerEnum.Tower_5,), "prompts again after the cooldown"
+
+
+def test_held_pad_prompts_once():
+    rig = Rig([GameA, GameB])
+    rig.step({TowerEnum.Tower_1})
+    rig.step({TowerEnum.Tower_1}, secs=gc_mod.PAD_PROMPT_COOLDOWN_SECS * 2)
+    rig.step({TowerEnum.Tower_1})
+    assert len(pad_prompts(rig)) == 1, "standing on the pad is one stomp, not a repeat"
+
+
+def test_pad_stomp_in_ambient_prompts():
+    rig = Rig([GameA, GameB])
+    rig.step(secs=SELECT_IDLE_TIMEOUT_SECS + 0.1)
+    assert isinstance(rig.game, Ambient)
+    rig.step({TowerEnum.Tower_2})
+    assert pad_prompts(rig) == [(TowerEnum.Tower_2,)]
+
+
+def test_pad_stomp_during_game_does_not_prompt():
+    rig = Rig([GameA, GameB])
+    rig.start_selected_game()
+    rig.step({TowerEnum.Tower_4})
+    rig.step()
+    assert pad_prompts(rig) == [], "in a game the pads belong to the game"
 
 
 # ------------------------------------------------------------
