@@ -114,14 +114,16 @@ class GameController(StateMachineMixin, StateMachine):
         self._quiet_hold_secs: float = 0.0
         self._quiet_hold_armed: bool = True
 
-        # Sets _game_classes (the profile's roster) and the master
-        # volume/brightness before any state announces or lights up
-        self._apply_profile(self._active_profile)
-        self._game_cycler = cycle(self._game_classes)
-        self._selected_game: type[BaseGame] = self._game_cycler.__next__()
-
         self._ambient_class: type[BaseGame] = ambient_class
         self._playing_ambient: bool = False
+
+        # Sets _game_classes (the profile's roster) and the master
+        # volume/brightness before any state announces or lights up.
+        # An ambient-only roster (empty) has no game to pre-select, so
+        # ambient stands in
+        self._apply_profile(self._active_profile)
+        self._game_cycler = cycle(self._game_classes)
+        self._selected_game: type[BaseGame] = next(self._game_cycler, self._ambient_class)
 
         self._game_idle_secs: float = 0.0
         self._controller_input_idle_secs: float = 0.0
@@ -190,6 +192,10 @@ class GameController(StateMachineMixin, StateMachine):
         allowed = profile.allowed_games
         if allowed is None:
             games = list(self._all_game_classes)
+        elif not allowed:
+            # Explicitly empty (e.g. `--quiet-games` with no names):
+            # every game is disabled and the show is ambient-only
+            games = []
         else:
             games = [g for g in self._all_game_classes if g.__name__ in allowed]
             if not games:
@@ -205,7 +211,7 @@ class GameController(StateMachineMixin, StateMachine):
         logger.info(
             "Show profile '%s': volume %.2f, brightness %.2f, games: %s",
             profile.name, profile.master_volume, profile.master_brightness,
-            ", ".join(g.__name__ for g in games),
+            ", ".join(g.__name__ for g in games) or "(none — ambient only)",
         )
 
     def _read_quiet_hours_state(self) -> bool:
@@ -248,6 +254,10 @@ class GameController(StateMachineMixin, StateMachine):
         call this, so the cooldown also only drains there — a leftover
         second or two can carry across a game back into selection,
         which is harmless."""
+        if not self._game_classes:
+            # Every game is disabled — there's no control panel to send
+            # anyone to, so the prompt would be a lie
+            return
         self._pad_prompt_cooldown_secs = max(0.0, self._pad_prompt_cooldown_secs - delta_secs)
         if self._pad_prompt_cooldown_secs > 0.0:
             return
@@ -271,12 +281,25 @@ class GameController(StateMachineMixin, StateMachine):
     # State: await_input
 
     def on_enter_await_input(self) -> None:
+        if not self._game_classes:
+            # Ambient-only profile: nothing to announce, and
+            # do_await_input hops straight to ambient
+            return
         self._selected_game = self._game_cycler.__next__()
         logger.info("Selected game: %s", self._selected_game.__name__)
         self._towers.play_sound(self._selected_game.__name__, volume=0.25)
         self._controller_input_idle_secs = 0.0
 
     def do_await_input(self, delta_secs: float) -> ShouldStop:
+        if not self._game_classes:
+            # Every game is disabled: selection has no job, so go
+            # straight to ambient instead of sitting white and silent
+            # for the idle timeout
+            logger.info("Profile has no games — going straight to ambient")
+            self._selected_game = self._ambient_class
+            self.start_game()
+            return
+
         self._update_pad_prompt(delta_secs)
         if self._towers.is_any_switch_pressed():
             self._controller_input_idle_secs = 0.0
@@ -340,7 +363,12 @@ class GameController(StateMachineMixin, StateMachine):
                 self.cancel_game()
                 return
 
-        if self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.RESET):
+        if self._playing_ambient and not self._game_classes:
+            # Ambient-only profile: the buttons have nowhere to take us,
+            # so none of them may bounce ambient through selection (the
+            # quiet-hours hold in update() is still the way out)
+            is_done = self._current_game.update(delta_secs)
+        elif self._inputs.did_controller_switch_transition_down(ControllerSwitchEnum.RESET):
             logger.info("Reset pressed")
             is_done = True
         elif self._playing_ambient and (

@@ -16,6 +16,11 @@ finished), and CLAUDE.md now records the project's rules.
       `intro_and_instructions/sounds_modes/use_control_panel.wav`, and
       uncomment the staged entry in both manifests. Until then a stomp
       logs "Sound use_control_panel not found" WARNINGs and stays silent
+- [ ] Ambient-only follow-up: `--quiet-games` with no names now empties the
+      quiet roster — ambient only, pads and control panel ignored, the
+      NEXT_GAME+RESET hold still toggles back. After the on-site tweaking
+      with the camp, consider promoting the tuned settings to a third named
+      ShowProfile instead of overloading quiet-hours flags
 - [ ] Quiet-hours show profile — on branch `quiet-hours`, needs rig
       verification (the desk sim covers the logic: `q` latches the combo).
       Holding NEXT_GAME+RESET 10s toggles a `ShowProfile`: master volume

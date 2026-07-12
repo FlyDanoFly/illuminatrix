@@ -485,6 +485,64 @@ def test_quiet_hold_during_ambient_ejects_then_toggles():
     assert rig.sounds._master_volume == 0.5
 
 
+# ------------------------------------------------------------
+# Ambient-only profile (explicitly empty roster disables all games)
+
+AMBIENT_ONLY_PROFILE = ShowProfile(
+    name="ambient only",
+    master_volume=0.5,
+    allowed_games=frozenset(),
+)
+
+
+def test_empty_roster_toggle_goes_straight_to_ambient():
+    rig = Rig([GameA, GameB], quiet_profile=AMBIENT_ONLY_PROFILE)
+    hold_quiet_combo(rig)
+    assert rig.state == "playing_game"
+    assert isinstance(rig.game, Ambient), "no games to select — straight to ambient"
+    assert "quiet_hours_on" in rig.sounds.played
+
+
+def test_empty_roster_ignores_buttons_and_pads():
+    rig = Rig([GameA, GameB], quiet_profile=AMBIENT_ONLY_PROFILE)
+    hold_quiet_combo(rig)
+    rig.step()  # release the combo
+    for button in (ControllerSwitchEnum.START, ControllerSwitchEnum.NEXT_GAME,
+                   ControllerSwitchEnum.RESET):
+        rig.step({button})
+        rig.step()  # release
+        assert isinstance(rig.game, Ambient), f"{button} must not bounce ambient"
+    rig.step({TowerEnum.Tower_3})
+    assert pad_prompts(rig) == [], "no prompt — there's no control panel to point at"
+    assert isinstance(rig.game, Ambient)
+
+
+def test_empty_roster_hold_toggles_back_to_games():
+    rig = Rig([GameA, GameB], quiet_profile=AMBIENT_ONLY_PROFILE)
+    hold_quiet_combo(rig)
+    rig.step()  # release
+    hold_quiet_combo(rig)
+    assert isinstance(rig.game, Ambient), "ambient rides through the toggle back"
+    rig.step()  # release
+    rig.step({ControllerSwitchEnum.NEXT_GAME})
+    assert rig.state == "cancel", "buttons eject ambient again under the full roster"
+    rig.step()
+    assert rig.state == "await_input"
+    assert rig.sounds.played[-1] == "GameA"
+
+
+def test_boot_with_empty_roster_lands_in_ambient():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        state_file = Path(tmp) / "quiet_state"
+        state_file.write_text("quiet")
+        rig = Rig([GameA, GameB], quiet_profile=AMBIENT_ONLY_PROFILE,
+                  quiet_state_file=state_file)
+        rig.step()
+        assert isinstance(rig.game, Ambient), "booting on the marker skips selection"
+
+
 if __name__ == "__main__":
     tests = [fn for name, fn in sorted(globals().items())
              if name.startswith("test_") and callable(fn)]

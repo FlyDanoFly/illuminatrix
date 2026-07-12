@@ -19,10 +19,13 @@ class ShowProfile:
     master_volume: float = 1.0
     # Multiplies every color on its way into a LightSystem
     master_brightness: float = 1.0
-    # Game class names selectable under this profile; None means all.
-    # Names not in the run's roster are simply absent (a dev run with a
-    # subset of games is normal), but an empty intersection falls back
-    # to the full roster rather than an unselectable installation.
+    # Game class names selectable under this profile; None means all,
+    # and an explicitly empty set disables every game — the show stays
+    # in ambient and ignores the pads and control panel (the quiet-hours
+    # hold still toggles profiles). Names not in the run's roster are
+    # simply absent (a dev run with a subset of games is normal), but a
+    # non-empty set matching none of them falls back to the full roster
+    # rather than an unselectable installation.
     allowed_games: frozenset[str] | None = None
 
 
