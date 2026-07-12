@@ -28,6 +28,15 @@ GAME_CONTROLLER_SELECT_IDLE_TIMEOUT_SECS = 2 * 60
 # Holding NEXT_GAME and RESET together this long toggles the quiet-hours
 # profile; both must be released before another toggle can arm
 QUIET_HOURS_HOLD_SECS = 10.0
+# Outside a game the pads do nothing, so a stomp answers with this voice
+# line ("go use the control panel") from the stomped pad's tower. The key
+# must exist in every bank the prompt can fire under: both the intro bank
+# (selection) and the ambient game's bank
+PAD_PROMPT_SOUND = "use_control_panel"
+PAD_PROMPT_VOLUME = 0.25
+# One cooldown shared by all pads, so jumping up and down (or hopping
+# between pads) can't machine-gun the line
+PAD_PROMPT_COOLDOWN_SECS = 2.0
 
 
 class GameController(StateMachineMixin, StateMachine):
@@ -48,6 +57,10 @@ class GameController(StateMachineMixin, StateMachine):
     the quiet-hours show profile (lower master volume/brightness, restricted
     game roster); the active profile persists across restarts via a marker
     file.
+
+    In selection and ambient — the states where pads do nothing — a pad
+    stomp plays PAD_PROMPT_SOUND from that pad's tower, throttled by one
+    global PAD_PROMPT_COOLDOWN_SECS cooldown across all pads.
     """
     # The selection/instructions sounds are the controller's own bank,
     # not any game's; play.py includes it in the boot preload
@@ -113,6 +126,7 @@ class GameController(StateMachineMixin, StateMachine):
         self._game_idle_secs: float = 0.0
         self._controller_input_idle_secs: float = 0.0
         self._select_idle_timeout_secs: float = select_idle_timeout_secs
+        self._pad_prompt_cooldown_secs: float = 0.0
 
         # Special case: if there is only one game passed in just use that, don't choose
         if len(game_classes) == 1:
@@ -226,6 +240,24 @@ class GameController(StateMachineMixin, StateMachine):
             )
 
     # ------------------------------------------------------------
+    # Pad prompt
+
+    def _update_pad_prompt(self, delta_secs: float) -> None:
+        """Answer a pad stomp with the "go use the control panel" line
+        from that pad's tower. Only the selection and ambient states
+        call this, so the cooldown also only drains there — a leftover
+        second or two can carry across a game back into selection,
+        which is harmless."""
+        self._pad_prompt_cooldown_secs = max(0.0, self._pad_prompt_cooldown_secs - delta_secs)
+        if self._pad_prompt_cooldown_secs > 0.0:
+            return
+        for tower in self._towers.values():
+            if tower.did_switch_transition_down():
+                tower.play_sound(PAD_PROMPT_SOUND, volume=PAD_PROMPT_VOLUME)
+                self._pad_prompt_cooldown_secs = PAD_PROMPT_COOLDOWN_SECS
+                return
+
+    # ------------------------------------------------------------
     # State: initial_state
 
     def on_start_selection(self) -> None:
@@ -245,6 +277,7 @@ class GameController(StateMachineMixin, StateMachine):
         self._controller_input_idle_secs = 0.0
 
     def do_await_input(self, delta_secs: float) -> ShouldStop:
+        self._update_pad_prompt(delta_secs)
         if self._towers.is_any_switch_pressed():
             self._controller_input_idle_secs = 0.0
         else:
@@ -293,6 +326,10 @@ class GameController(StateMachineMixin, StateMachine):
 
     def do_playing_game(self, delta_secs: float) -> ShouldStop:
         is_done = False
+
+        if self._playing_ambient:
+            # The pads do nothing in ambient either, so keep prompting
+            self._update_pad_prompt(delta_secs)
 
         if self._towers.is_any_switch_pressed():
             self._game_idle_secs = 0.0

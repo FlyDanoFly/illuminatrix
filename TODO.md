@@ -7,6 +7,15 @@ finished), and CLAUDE.md now records the project's rules.
 
 ## In flight
 
+- [ ] Pad prompt ("go use the control panel") — logic done in
+      GameController: in selection and ambient a pad stomp plays
+      `use_control_panel` from that pad's tower, one global 2s cooldown
+      across all pads (`PAD_PROMPT_*` constants). Remaining: record the
+      line, convert per `ffmpeg_commands.txt` (48kHz mono), drop it in the
+      assets repo as `ambient/sounds/use_control_panel.wav` and
+      `intro_and_instructions/sounds_modes/use_control_panel.wav`, and
+      uncomment the staged entry in both manifests. Until then a stomp
+      logs "Sound use_control_panel not found" WARNINGs and stays silent
 - [ ] Quiet-hours show profile — on branch `quiet-hours`, needs rig
       verification (the desk sim covers the logic: `q` latches the combo).
       Holding NEXT_GAME+RESET 10s toggles a `ShowProfile`: master volume
