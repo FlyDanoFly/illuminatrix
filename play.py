@@ -98,7 +98,7 @@ def main():
 
     parser.add_argument("--quiet-brightness", type=float, default=DEFAULT_QUIET_BRIGHTNESS, help="master light brightness (0.0-1.0) while the quiet-hours profile is active")
 
-    parser.add_argument("--quiet-games", nargs="+", default=list(DEFAULT_QUIET_GAMES), metavar="GAME", help="games selectable while the quiet-hours profile is active")
+    parser.add_argument("--quiet-games", nargs="*", default=list(DEFAULT_QUIET_GAMES), metavar="GAME", help="games selectable while the quiet-hours profile is active; no names disables all games (ambient only, pads and control panel ignored)")
 
     parser.add_argument("games", nargs="*", choices=sorted(available_games.keys()), help="game to run")
 
